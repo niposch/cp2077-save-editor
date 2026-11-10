@@ -179,6 +179,63 @@ export const desktop = {
   },
 }
 
+// ------------------------------------------------------------------ bundled examples (website)
+
+export interface ExampleInfo {
+  folder: string
+  title: string
+  description?: string
+  author: string
+  source: string
+  sourceUrl: string
+  files: string[]
+}
+
+export interface ExampleEntry extends SaveEntry {
+  example: ExampleInfo
+}
+
+/** Example saves shipped with the website (examples/index.json); empty when not bundled. */
+export async function listExamples(): Promise<ExampleEntry[]> {
+  const base = `${import.meta.env.BASE_URL}examples/`
+  let index: { examples: ExampleInfo[] }
+  try {
+    const r = await fetch(`${base}index.json`)
+    if (!r.ok) return []
+    // an SPA fallback (index.html) fails to parse, which also means "no examples"
+    index = await r.json()
+    if (!Array.isArray(index?.examples)) return []
+  } catch {
+    return []
+  }
+  const url = (ex: ExampleInfo, f: string) => `${base}${encodeURIComponent(ex.folder)}/${f}`
+  const get = async (ex: ExampleInfo, f: string) => {
+    const r = await fetch(url(ex, f))
+    if (!r.ok) throw new Error(`couldn't download ${f} (${r.status})`)
+    return new Uint8Array(await r.arrayBuffer())
+  }
+  return Promise.all(
+    index.examples.map(async (ex) => {
+      const metaName = ex.files.find(isMetadataName) ?? null
+      const metaText = metaName ? await fetch(url(ex, metaName)).then((r) => (r.ok ? r.text() : null)).catch(() => null) : null
+      return {
+        id: `example:${ex.folder}`,
+        folder: ex.folder,
+        meta: parseMetadata(metaText),
+        example: ex,
+        screenshot: ex.files.includes("screenshot.png") ? async () => url(ex, "screenshot.png") : undefined,
+        load: async () => ({
+          folder: ex.folder,
+          sav: await get(ex, "sav.dat"),
+          metadataName: metaName,
+          metadataText: metaText,
+          others: await Promise.all(ex.files.filter((f) => f !== "sav.dat" && f !== metaName).map(async (f) => ({ name: f, bytes: await get(ex, f) }))),
+        }),
+      }
+    }),
+  )
+}
+
 // ------------------------------------------------------------------ dev
 
 export const dev = {

@@ -64,14 +64,49 @@ fn struct_json(s: &Struct) -> J {
     })
 }
 
+/// One user edit, kept in a replayable form so individual edits can be reverted.
+#[derive(Debug, Clone)]
+enum Op {
+    Attribute(String, i32),
+    Points(String, i32),
+    Progression(String, i32),
+    LifePath(String),
+    Money(u32),
+    UnlockReset,
+    SetFact(String, u32),
+    RemoveFact(String),
+    SetValue { node: String, path: String, value: String },
+}
+
+/// A pending change as shown in the UI: `target: old → new`.
+#[derive(Debug, Clone)]
+struct Change {
+    target: String,
+    /// Value before the first edit of this target.
+    old: String,
+    /// Value after the latest edit.
+    new: String,
+    /// The latest edit of this target (replayed when other changes are reverted).
+    op: Op,
+}
+
+struct Applied {
+    target: String,
+    old: String,
+    new: String,
+    warning: Option<String>,
+}
+
 #[wasm_bindgen]
 pub struct Session {
+    /// The unedited `sav.dat`, for reverting individual changes.
+    original: Vec<u8>,
     save: SaveFile,
-    /// Extra numeric metadata.9.json fields to update on write (attribute values).
+    /// Extra metadata.9.json fields to update on write (raw JSON values).
     meta: Vec<(String, String)>,
-    /// Applied edits as (target, first old value, latest new value); repeated edits of the same
-    /// target are merged, and edits that end at the original value are dropped.
-    changes: Vec<(String, String, String)>,
+    /// Pending changes, one per target, in first-edit order. Edits returning a target to its
+    /// original value drop the change.
+    changes: Vec<Change>,
     cache: HashMap<String, PackageNode>,
 }
 
@@ -84,24 +119,95 @@ impl Session {
         Ok(&self.cache[node])
     }
 
-    fn edited(&mut self, target: impl Into<String>, old: impl Into<String>, new: impl Into<String>) {
-        self.cache.clear();
-        let (target, old, new) = (target.into(), old.into(), new.into());
-        match self.changes.iter().position(|c| c.0 == target) {
-            Some(i) => {
-                if self.changes[i].1 == new {
-                    self.changes.remove(i);
-                } else {
-                    self.changes[i].2 = new;
-                }
-            }
-            None => self.changes.push((target, old, new)),
-        }
-    }
-
     fn set_meta(&mut self, key: &str, value: String) {
         self.meta.retain(|(k, _)| k != key);
         self.meta.push((key.to_string(), value));
+    }
+
+    fn fact_value(&self, key: &str) -> anyhow::Result<String> {
+        Ok(self.save.get_fact(parse_fact_key(key)?)?.map_or("unset".into(), |f| f.1.to_string()))
+    }
+
+    /// Apply one edit to the save (and metadata), describing what changed.
+    fn apply(&mut self, op: &Op) -> anyhow::Result<Applied> {
+        let a = |target: &str, old: String, new: String, warning: Option<String>| Applied { target: target.to_string(), old, new, warning };
+        Ok(match op {
+            Op::Attribute(name, v) => {
+                let (stat, meta_key) = resolve_attribute(name)?;
+                let r = self.save.set_attribute(stat, *v)?;
+                self.set_meta(meta_key, format!("{v}.0"));
+                a(stat, r.old.map_or("default".into(), |o| o.to_string()), v.to_string(), r.warning)
+            }
+            Op::Progression(key, v) => {
+                let (ty, _, meta_key) = resolve_progression(key)?;
+                let r = self.save.set_progression(ty, *v)?;
+                self.set_meta(meta_key, format!("{v}.0"));
+                let label = if ty == "Level" { "Level" } else { "Street cred" };
+                a(label, r.old.map_or("default".into(), |o| o.to_string()), v.to_string(), r.warning)
+            }
+            Op::Points(kind, v) => {
+                let ty = resolve_point_kind(kind)?;
+                let old = self.save.set_unspent_points(ty, *v)?;
+                a(&format!("{kind} points"), old.unwrap_or(0).to_string(), v.to_string(), None)
+            }
+            Op::LifePath(name) => {
+                let lp = resolve_life_path(name)?;
+                let old = self.save.set_life_path(lp)?;
+                self.set_meta("lifePath", json_string(lp));
+                a("Life path", old, lp.to_string(), None)
+            }
+            Op::Money(v) => {
+                let old = self.save.set_money(*v)?;
+                a("Money", old.to_string(), v.to_string(), None)
+            }
+            Op::UnlockReset => {
+                let removed = self.save.remove_fact(parse_fact_key("ResetAttributeDisabled")?)?;
+                let old = if removed { "used" } else { "available" };
+                a("Attribute reset", old.into(), "available".into(), None)
+            }
+            Op::SetFact(key, v) => {
+                let old = self.fact_value(key)?;
+                self.save.set_fact(parse_fact_key(key)?, *v)?;
+                a(&format!("fact {key}"), old, v.to_string(), None)
+            }
+            Op::RemoveFact(key) => {
+                let old = self.fact_value(key)?;
+                self.save.remove_fact(parse_fact_key(key)?)?;
+                a(&format!("fact {key}"), old, "unset".into(), None)
+            }
+            Op::SetValue { node, path, value } => {
+                let r = self.save.edit_package(node, |p| p.set_path(path, value))?;
+                let old = match r {
+                    SetResult::Changed { old } => scalar_str(&old).unwrap_or_default(),
+                    SetResult::Inserted => "(default)".into(),
+                };
+                a(&format!("{node}:{path}"), old, value.clone(), None)
+            }
+        })
+    }
+
+    /// Apply an edit and record it in the change list. Returns (old value, warning).
+    fn record(&mut self, op: Op) -> anyhow::Result<(String, Option<String>)> {
+        let r = self.apply(&op)?;
+        self.cache.clear();
+        match self.changes.iter().position(|c| c.target == r.target) {
+            Some(i) if self.changes[i].old == r.new => {
+                self.changes.remove(i);
+            }
+            Some(i) => {
+                self.changes[i].new = r.new.clone();
+                self.changes[i].op = op;
+            }
+            // edits that change nothing (e.g. restoring an already available reset) aren't listed
+            None if r.old == r.new => {}
+            None => self.changes.push(Change { target: r.target.clone(), old: r.old.clone(), new: r.new, op }),
+        }
+        Ok((r.old, r.warning))
+    }
+
+    fn fresh(original: Vec<u8>) -> anyhow::Result<Session> {
+        let save = SaveFile::parse(&original)?;
+        Ok(Session { original, save, meta: vec![], changes: vec![], cache: HashMap::new() })
     }
 }
 
@@ -110,8 +216,7 @@ impl Session {
     /// Parse a `sav.dat`.
     #[wasm_bindgen(constructor)]
     pub fn new(sav: &[u8]) -> R<Session> {
-        let save = SaveFile::parse(sav).map_err(err)?;
-        Ok(Session { save, meta: vec![], changes: vec![], cache: HashMap::new() })
+        Session::fresh(sav.to_vec()).map_err(err)
     }
 
     /// `{ saveVersion, gameVersion, archiveVersion, nodes, dataSize }`
@@ -159,54 +264,33 @@ impl Session {
 
     /// Set an attribute (body/reflexes/tech/intelligence/cool). Returns a warning or "".
     pub fn set_attribute(&mut self, name: &str, value: i32) -> R<String> {
-        let (stat, meta_key) = resolve_attribute(name).map_err(err)?;
-        let r = self.save.set_attribute(stat, value).map_err(err)?;
-        self.set_meta(meta_key, format!("{value}.0"));
-        self.edited(stat, r.old.map_or("default".into(), |o| o.to_string()), value.to_string());
-        Ok(r.warning.unwrap_or_default())
+        Ok(self.record(Op::Attribute(name.into(), value)).map_err(err)?.1.unwrap_or_default())
     }
 
     /// Set level ("level", 1..=60) or street cred ("streetcred", 1..=50). Returns a warning or "".
     pub fn set_progression(&mut self, key: &str, value: i32) -> R<String> {
-        let (ty, _, meta_key) = resolve_progression(key).map_err(err)?;
-        let r = self.save.set_progression(ty, value).map_err(err)?;
-        self.set_meta(meta_key, format!("{value}.0"));
-        let label = if ty == "Level" { "Level" } else { "Street cred" };
-        self.edited(label, r.old.map_or("default".into(), |o| o.to_string()), value.to_string());
-        Ok(r.warning.unwrap_or_default())
+        Ok(self.record(Op::Progression(key.into(), value)).map_err(err)?.1.unwrap_or_default())
     }
 
     /// Set the life path (corpo/nomad/streetkid).
     pub fn set_life_path(&mut self, name: &str) -> R<()> {
-        let lp = resolve_life_path(name).map_err(err)?;
-        let old = self.save.set_life_path(lp).map_err(err)?;
-        self.set_meta("lifePath", json_string(lp));
-        self.edited("Life path", old, lp);
-        Ok(())
+        self.record(Op::LifePath(name.into())).map_err(err).map(|_| ())
     }
 
     /// Set V's money.
     pub fn set_money(&mut self, value: u32) -> R<()> {
-        let old = self.save.set_money(value).map_err(err)?;
-        self.edited("Money", old.to_string(), value.to_string());
-        Ok(())
+        self.record(Op::Money(value)).map_err(err).map(|_| ())
     }
 
     /// Set unspent points (attribute/perk/relic).
     pub fn set_points(&mut self, kind: &str, value: i32) -> R<()> {
-        let ty = resolve_point_kind(kind).map_err(err)?;
-        let old = self.save.set_unspent_points(ty, value).map_err(err)?;
-        self.edited(format!("{kind} points"), old.unwrap_or(0).to_string(), value.to_string());
-        Ok(())
+        self.record(Op::Points(kind.into(), value)).map_err(err).map(|_| ())
     }
 
     /// Remove `ResetAttributeDisabled`. Returns false if the reset was already available.
     pub fn unlock_reset(&mut self) -> R<bool> {
-        let removed = self.save.remove_fact(parse_fact_key("ResetAttributeDisabled").map_err(err)?).map_err(err)?;
-        if removed {
-            self.edited("Attribute reset", "used", "available");
-        }
-        Ok(removed)
+        let (old, _) = self.record(Op::UnlockReset).map_err(err)?;
+        Ok(old == "used")
     }
 
     /// `{ hash, value, table } | null` for a fact name or `0xHASH`.
@@ -220,18 +304,12 @@ impl Session {
     }
 
     pub fn set_fact(&mut self, key: &str, value: u32) -> R<()> {
-        let old = self.save.get_fact(parse_fact_key(key).map_err(err)?).map_err(err)?.map_or(0, |f| f.1);
-        self.save.set_fact(parse_fact_key(key).map_err(err)?, value).map_err(err)?;
-        self.edited(format!("fact {key}"), old.to_string(), value.to_string());
-        Ok(())
+        self.record(Op::SetFact(key.into(), value)).map_err(err).map(|_| ())
     }
 
     pub fn remove_fact(&mut self, key: &str) -> R<bool> {
-        let removed = self.save.remove_fact(parse_fact_key(key).map_err(err)?).map_err(err)?;
-        if removed {
-            self.edited(format!("fact {key}"), "set", "removed");
-        }
-        Ok(removed)
+        let (old, _) = self.record(Op::RemoveFact(key.into())).map_err(err)?;
+        Ok(old != "unset")
     }
 
     pub fn fact_count(&self) -> R<u32> {
@@ -269,19 +347,31 @@ impl Session {
 
     /// Generic edit: set the scalar at `path` (see docs/editing.md). Returns the old value text.
     pub fn set_value(&mut self, node: &str, path: &str, value: &str) -> R<String> {
-        let r = self.save.edit_package(node, |p| p.set_path(path, value)).map_err(err)?;
-        let old = match r {
-            SetResult::Changed { old } => scalar_str(&old).unwrap_or_default(),
-            SetResult::Inserted => "(default)".into(),
-        };
-        self.edited(format!("{node}:{path}"), old.clone(), value);
-        Ok(old)
+        let op = Op::SetValue { node: node.into(), path: path.into(), value: value.into() };
+        Ok(self.record(op).map_err(err)?.0)
     }
 
-    /// Edits applied so far, oldest first (JSON string array).
+    /// Pending changes, oldest first: `[{ target, old, new }]`.
     pub fn changes(&self) -> String {
-        let list: Vec<String> = self.changes.iter().map(|(t, o, n)| format!("{t}: {o} → {n}")).collect();
+        let list: Vec<J> = self.changes.iter().map(|c| json!({ "target": c.target, "old": c.old, "new": c.new })).collect();
         json!(list).to_string()
+    }
+
+    /// Undo one pending change: re-parse the original save and replay every other change.
+    /// The session is only replaced if the whole replay succeeds.
+    pub fn revert(&mut self, index: u32) -> R<()> {
+        let i = index as usize;
+        if i >= self.changes.len() {
+            return Err(JsError::new("no such change"));
+        }
+        let mut next = Session::fresh(self.original.clone()).map_err(err)?;
+        for (j, c) in self.changes.iter().enumerate() {
+            if j != i {
+                next.record(c.op.clone()).map_err(|e| err(e.context(format!("re-applying {}", c.target))))?;
+            }
+        }
+        *self = next;
+        Ok(())
     }
 
     /// Serialize the edited save.
@@ -304,4 +394,53 @@ impl Session {
 #[wasm_bindgen]
 pub fn fact_hash(name: &str) -> String {
     format!("{:#010x}", cp2077_save::facts::fnv1a32(name))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample() -> Option<Vec<u8>> {
+        // project-local copy of a real save (git-ignored); skip when absent
+        std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/../../saves/ManualSave-17/sav.dat")).ok()
+    }
+
+    #[test]
+    fn revert_one_change_equals_never_making_it() {
+        let Some(orig) = sample() else { return };
+        let mut s = Session::new(&orig).unwrap();
+        s.set_progression("level", 50).unwrap();
+        s.set_money(1).unwrap();
+        s.set_attribute("cool", 15).unwrap();
+        s.set_attribute("cool", 16).unwrap(); // merged into one change
+        assert_eq!(s.changes.len(), 3);
+
+        s.revert(1).unwrap(); // money
+        let mut expected = Session::new(&orig).unwrap();
+        expected.set_progression("level", 50).unwrap();
+        expected.set_attribute("cool", 16).unwrap();
+        assert!(s.save.data == expected.save.data, "revert must equal never having made the change");
+        assert_eq!(s.meta, expected.meta);
+        assert_eq!(s.save.money().unwrap(), Some(345579));
+        let targets: Vec<&str> = s.changes.iter().map(|c| c.target.as_str()).collect();
+        assert_eq!(targets, ["Level", "Cool"]);
+        assert_eq!(s.changes[1].old, "20");
+
+        s.revert(1).unwrap();
+        s.revert(0).unwrap();
+        assert!(s.changes.is_empty());
+        let fresh = SaveFile::parse(&orig).unwrap();
+        assert!(s.save.data == fresh.data && s.save.nodes.iter().zip(&fresh.nodes).all(|(a, b)| a.offset == b.offset && a.size == b.size));
+    }
+
+    #[test]
+    fn editing_back_to_original_drops_the_change() {
+        let Some(orig) = sample() else { return };
+        let mut s = Session::new(&orig).unwrap();
+        s.set_points("perk", 9).unwrap();
+        s.set_points("perk", 4).unwrap();
+        assert!(s.changes.is_empty());
+        assert!(!s.unlock_reset().unwrap()); // already available: nothing to list
+        assert!(s.changes.is_empty());
+    }
 }

@@ -55,8 +55,39 @@ function devSaves(): Plugin {
   }
 }
 
+/**
+ * Example saves (../examples) for the website's "Try an example save":
+ * served at `examples/` by the dev server and copied into `dist/examples` by web builds.
+ * Desktop builds (run by the Tauri CLI, which sets TAURI_ENV_PLATFORM) leave them out.
+ */
+function exampleSaves(): Plugin {
+  const src = path.resolve(__dirname, '../examples')
+  const isDesktop = !!process.env.TAURI_ENV_PLATFORM
+  let outDir = ''
+  return {
+    name: 'example-saves',
+    configResolved(c) {
+      outDir = path.resolve(c.root, c.build.outDir)
+    },
+    configureServer(server) {
+      server.middlewares.use('/examples', (req, res, next) => {
+        const rel = decodeURIComponent((req.url ?? '/').split('?')[0]).replace(/^\/+/, '')
+        const target = path.resolve(src, rel)
+        if (!target.startsWith(src + path.sep) || !fs.existsSync(target) || fs.statSync(target).isDirectory()) return next()
+        res.end(fs.readFileSync(target))
+      })
+    },
+    closeBundle() {
+      if (isDesktop || !outDir || !fs.existsSync(src)) return
+      fs.cpSync(src, path.join(outDir, 'examples'), { recursive: true, filter: (p) => !p.endsWith('README.md') })
+    },
+  }
+}
+
 export default defineConfig({
-  plugins: [react(), tailwindcss(), devSaves()],
+  // relative asset paths so the site works under a GitHub Pages sub-path
+  base: './',
+  plugins: [react(), tailwindcss(), devSaves(), exampleSaves()],
   resolve: { alias: { '@': path.resolve(__dirname, './src') } },
   // Tauri expects a fixed port and doesn't want the screen cleared
   clearScreen: false,

@@ -17,10 +17,24 @@ npm --prefix app run desktop    # desktop app
 * Quest facts: read/write. **Restoring the once-per-playthrough attribute reset works in-game.**
 * Embedded object packages (ScriptableSystemsContainer, StatsSystem, ...): generic reader +
   writer, byte-exact round trip on all test saves, path-based get/set.
-* Player edits: attributes and attribute/perk/relic points (both verified in-game), level,
-  street cred, life path, money. See [docs/editing.md](docs/editing.md).
+* Player edits: attributes, attribute/perk/relic points, level, street cred, life path, money
+  (all verified in-game). See [docs/editing.md](docs/editing.md).
+* Tested against 2.5 (save version 277), 2.31 (269) and 1.6-era (224) saves.
 * Inventory: layout decoded (all inventories, simple items); items with mods not yet.
 * Not decoded yet: item stats/mods, `PersistencySystem2`, `DataBuffer` contents, and more.
+
+## Example saves
+
+[`examples/`](examples/) holds saves the website offers as "Try an example save" (see
+[examples/README.md](examples/README.md) for credits). They belong to their authors and **are not
+covered by this repository's license**.
+
+## License
+
+[MIT](LICENSE), except the third-party example saves in `examples/`.
+
+This is an unofficial fan tool, not affiliated with or endorsed by CD PROJEKT RED. Cyberpunk 2077
+is a trademark of CD PROJEKT S.A.
 
 ## CLI
 
@@ -68,6 +82,8 @@ crates/core      save format: container, facts, packages, path edits, player edi
 crates/cli       command-line tool (`cp2077-save`)
 crates/wasm      WebAssembly bindings used by the UI
 app/             React + shadcn/ui frontend (web), app/src-tauri = desktop shell
+examples/        example saves for the website (third-party, credited)
+.github/         GitHub Pages deployment workflow
 re/              Python RE helpers (pefile + capstone)
 docs/            findings
 saves/ gamefiles/ work/ output/   local copies & scratch (git-ignored)

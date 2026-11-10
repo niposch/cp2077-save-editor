@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react"
 import { toast } from "sonner"
-import { SaveSession, initCore } from "@/lib/core"
+import { SaveSession, initCore, type Change } from "@/lib/core"
 import { parseMetadata, type SaveEntry, type SaveFiles, type SaveMetadata } from "@/lib/storage"
 
 export interface OpenSave {
@@ -20,7 +20,9 @@ interface Ctx {
   discard: () => void
   /** Run an edit; errors become toasts. Returns undefined on failure. */
   mutate: <T>(label: string, fn: (s: SaveSession) => T) => T | undefined
-  changes: string[]
+  changes: Change[]
+  /** Undo a single pending change. */
+  revert: (index: number) => void
 }
 
 const SaveCtx = createContext<Ctx | null>(null)
@@ -81,8 +83,16 @@ export function SaveProvider({ children }: { children: ReactNode }) {
 
   const changes = useMemo(() => (open ? open.session.changes() : []), [open, rev])
 
+  const revert = useCallback(
+    (index: number) => {
+      const c = changes[index]
+      if (c && mutate(`Couldn't revert ${c.target}`, (s) => (s.revert(index), true))) toast(`Reverted ${c.target}`)
+    },
+    [changes, mutate],
+  )
+
   return (
-    <SaveCtx.Provider value={{ open, rev, loading, openEntry, close, discard, mutate, changes }}>{children}</SaveCtx.Provider>
+    <SaveCtx.Provider value={{ open, rev, loading, openEntry, close, discard, mutate, changes, revert }}>{children}</SaveCtx.Provider>
   )
 }
 

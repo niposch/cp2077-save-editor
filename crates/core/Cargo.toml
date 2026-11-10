@@ -3,6 +3,7 @@ name = "cp2077-save"
 description = "Cyberpunk 2077 save format: container, facts, object packages, player edits (no I/O)"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 
 [dependencies]
 anyhow.workspace = true

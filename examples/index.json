@@ -1,0 +1,13 @@
+{
+  "examples": [
+    {
+      "folder": "ManualSave-818",
+      "title": "Nocturne Op55N1",
+      "description": "Nomad, level 50, all attributes at 20. Patch 2.31, base game.",
+      "author": "Lix (Lix7PTE)",
+      "source": "Nexus Mods: Cyberpunk 2077 Save Game",
+      "sourceUrl": "https://www.nexusmods.com/cyberpunk2077/mods/15643",
+      "files": ["sav.dat", "metadata.9.json", "screenshot.png"]
+    }
+  ]
+}

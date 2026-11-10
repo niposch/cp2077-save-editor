@@ -44,11 +44,28 @@ Only active on the Vite dev server, so they never ship:
 * `POST /__dev/out/<file>`: writes into `work/web-out/`, to capture what the browser would download.
 * `window.__cpse`: the open save, for console checks.
 
+## Publishing the website (GitHub Pages)
+
+`.github/workflows/pages.yml` builds the site (wasm core + React + `examples/`) on every push to
+`main`/`master` and deploys `app/dist` to GitHub Pages. Turn it on once under
+*Settings → Pages → Build and deployment → Source: GitHub Actions*. The build uses relative asset
+paths (`base: './'`), so it works under `https://<user>.github.io/<repo>/`.
+
+## Example saves
+
+The web start screen offers the saves listed in `examples/index.json`, with their authors credited
+on the card and linked below. The Vite plugin in `app/vite.config.ts` serves `examples/` in dev and
+copies it into `dist/examples` for web builds. Desktop builds (run by the Tauri CLI) leave it out.
+
 ## Interaction details
 
 * Number fields are always real inputs with a fixed width: focusing never shifts the layout,
   Tab moves between fields (the −/+ buttons are skipped), the value is selected on focus so typing
   replaces it, ↑/↓ step, Enter commits, Esc reverts. Out-of-range values are clamped.
+* **Pending changes** sit in a sidebar next to every tab. Each entry shows `old → new` and has
+  its own revert button. Reverting re-parses the original save and replays every other change, so
+  the result is identical to never having made that edit (unit-tested against a real save).
+  Repeated edits of the same value merge into one entry; editing a value back drops the entry.
 * Long lists (objects in a system, the value tree, listed facts) are virtualized with
   `@tanstack/react-virtual`. Everything is scrollable and only visible rows are rendered.
   The value tree is flattened into rows from its expanded branches.

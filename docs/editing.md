@@ -32,10 +32,10 @@ under a new name (e.g. `ManualSave-99`) and load it. Keep a backup.
 |---|---|---|
 | `--attr` | `PlayerDevelopmentData.attributes[attributeName=X].value` **and** the attribute's `gameConstantStatModifier` in StatsSystem's `sharedDataBuffer`; also `metadata.9.json` | ✅ works |
 | `--points` | `PlayerDevelopmentData.devPoints[type=T].unspent` (attribute = entry without `type`, perk = `Primary`, relic = `Espionage`) | ✅ works |
-| `--level` | `proficiencies[type=Level].currentLevel` (+ `currentExp` → 0), the `Level` stat modifier in StatsSystem, `LevelAssignmentSystem_Ver1` (float), metadata `level` | pending |
-| `--street-cred` | `proficiencies[type=StreetCred].currentLevel` (+ `currentExp` → 0), the `StreetCred` stat modifier, metadata `streetCred` | pending |
-| `--life-path` | `PlayerDevelopmentData.lifePath` (absent = Corporate) and the facts `q000_corpo/nomad/street_kid_background`; metadata `lifePath` | pending |
-| `--money` | quantity of V's `Items.money` item ([inventory.md](inventory.md)) | pending |
+| `--level` | `proficiencies[type=Level].currentLevel` (+ `currentExp` → 0), the `Level` stat modifier in StatsSystem, `LevelAssignmentSystem_Ver1` (float), metadata `level` | ✅ works |
+| `--street-cred` | `proficiencies[type=StreetCred].currentLevel` (+ `currentExp` → 0), the `StreetCred` stat modifier, metadata `streetCred` | ✅ works |
+| `--life-path` | `PlayerDevelopmentData.lifePath` (absent = Corporate) and the facts `q000_corpo/nomad/street_kid_background`; metadata `lifePath` | ✅ works |
+| `--money` | quantity of V's `Items.money` item ([inventory.md](inventory.md)) | ✅ works |
 | `--unlock-reset` | removes fact `ResetAttributeDisabled` | ✅ works |
 | `--fact` / `--remove-fact` | FactsTable | (unlock-reset uses it) |
 | `--set` | anything in an object package | n/a |

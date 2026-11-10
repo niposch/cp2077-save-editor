@@ -43,7 +43,7 @@ export function FactsTab() {
   const set = () => {
     const v = Number(newValue)
     if (!Number.isInteger(v) || v < 0) return toast.error("Fact values are whole numbers ≥ 0")
-    if (mutate("Couldn't set fact", (s) => s.setFact(key, v)) !== undefined) toast.success(`${key} = ${v}`)
+    if (mutate("Couldn't set fact", (s) => (s.setFact(key, v), true))) toast.success(`${key} = ${v}`)
     setNewValue("")
   }
   const remove = () => {

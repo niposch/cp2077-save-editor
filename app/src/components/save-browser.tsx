@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react"
-import { FolderOpen, Loader2, RefreshCw, ShieldCheck, ImageOff, FlaskConical } from "lucide-react"
+import { FolderOpen, Loader2, RefreshCw, ShieldCheck, ImageOff, FlaskConical, ExternalLink } from "lucide-react"
 import { open as openDialog } from "@tauri-apps/plugin-dialog"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { HudHeading, formatPlayTime, parseTimestamp } from "@/components/hud"
-import { desktop, dev, platform, savesFromFileList, type SaveEntry } from "@/lib/storage"
+import { desktop, dev, listExamples, platform, savesFromFileList, type ExampleEntry, type SaveEntry } from "@/lib/storage"
 import { useSave } from "@/state/save-context"
 import { BackupNotice, SAVES_DIR_HINT } from "@/components/backup-notice"
 import { cn } from "@/lib/utils"
@@ -52,6 +52,7 @@ function Thumb({ entry }: { entry: SaveEntry }) {
 function SaveCard({ entry, onOpen, busy }: { entry: SaveEntry; onOpen: () => void; busy: boolean }) {
   const m = entry.meta
   const ts = parseTimestamp(m?.timestampString)
+  const example = "example" in entry ? (entry as ExampleEntry).example : null
   return (
     <button
       type="button"
@@ -62,7 +63,7 @@ function SaveCard({ entry, onOpen, busy }: { entry: SaveEntry; onOpen: () => voi
       <Thumb entry={entry} />
       <div className="relative -mt-9 px-3 pb-3">
         <div className="flex items-end justify-between gap-2">
-          <span className="hud-label truncate text-lg text-foreground drop-shadow">{entry.folder}</span>
+          <span className="hud-label truncate text-lg text-foreground drop-shadow">{example?.title ?? entry.folder}</span>
           {busy && <Loader2 className="mb-1 size-4 animate-spin text-cyan" />}
         </div>
         <div className="mt-2 flex items-baseline gap-4 font-heading">
@@ -84,6 +85,11 @@ function SaveCard({ entry, onOpen, busy }: { entry: SaveEntry; onOpen: () => voi
           {m?.lifePath && <Badge variant="outline">{m.lifePath}</Badge>}
           {m?.difficulty && <Badge variant="outline">{m.difficulty}</Badge>}
         </div>
+        {example && (
+          <p className="mt-2 text-xs text-muted-foreground">
+            by <span className="text-foreground/85">{example.author}</span> · {example.source}
+          </p>
+        )}
       </div>
     </button>
   )
@@ -238,6 +244,31 @@ async function filesFromDrop(dt: DataTransfer): Promise<File[]> {
   return out
 }
 
+/** Example saves bundled with the website, so visitors can try the editor without a save. */
+function ExampleSource() {
+  const [examples, setExamples] = useState<ExampleEntry[]>([])
+  useEffect(() => {
+    listExamples().then(setExamples)
+  }, [])
+  if (!examples.length) return null
+  return (
+    <div className="space-y-3">
+      <SaveGrid title="Try an example save" saves={examples} />
+      <p className="text-xs text-muted-foreground">
+        Example saves are shared by their authors and aren't covered by this site's license.{" "}
+        {examples.map((e, i) => (
+          <span key={e.id}>
+            {i > 0 && " · "}
+            <a href={e.example.sourceUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-cyan-dim hover:text-cyan">
+              {e.example.title} by {e.example.author} <ExternalLink className="size-3" />
+            </a>
+          </span>
+        ))}
+      </p>
+    </div>
+  )
+}
+
 function DevSource() {
   const [saves, setSaves] = useState<SaveEntry[] | null>(null)
   useEffect(() => {
@@ -262,6 +293,7 @@ export function SaveBrowser() {
     <div className="mx-auto w-full max-w-7xl space-y-10 px-6 py-8">
       <BackupNotice />
       {platform === "desktop" ? <DesktopSource /> : <WebSource />}
+      {platform === "web" && <ExampleSource />}
       {dev.available && <DevSource />}
     </div>
   )

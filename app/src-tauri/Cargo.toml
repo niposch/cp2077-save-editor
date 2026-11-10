@@ -3,6 +3,7 @@ name = "cp2077-save-desktop"
 description = "Desktop shell for the Cyberpunk 2077 save editor"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 
 [lib]
 name = "cp2077_save_desktop_lib"

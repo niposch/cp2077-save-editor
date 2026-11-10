@@ -36,6 +36,13 @@ export interface PlayerData {
 export type LifePath = "Corporate" | "Nomad" | "StreetKid"
 export type ProgressionKey = "level" | "streetcred"
 
+/** A pending change: `target: old → new` (repeated edits of one target are merged). */
+export interface Change {
+  target: string
+  old: string
+  new: string
+}
+
 export interface FactInfo {
   hash: string
   value: number | null
@@ -115,8 +122,12 @@ export class SaveSession {
   setValue(node: string, path: string, value: string): string {
     return this.s.set_value(node, path, value)
   }
-  changes(): string[] {
+  changes(): Change[] {
     return JSON.parse(this.s.changes())
+  }
+  /** Undo one pending change (by index), keeping all others. */
+  revert(index: number) {
+    this.s.revert(index)
   }
   write(): Uint8Array {
     return this.s.write()

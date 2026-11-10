@@ -80,6 +80,7 @@ could be edited the same way, but their milestone rewards are granted on level-u
 
 `PlayerDevelopmentData.lifePath: gamedataLifePath`. `Corporate` is the enum's first value, so Corpo
 saves omit the field (the 1.6 Street Kid save has `lifePath = StreetKid`). The prologue also sets
-one of the facts `q000_corpo_background` / `q000_street_kid_background` (seen in saves) /
-`q000_nomad_background` (same naming, not yet seen in a save). The editor switches both.
+one of the facts `q000_corpo_background` / `q000_street_kid_background` /
+`q000_nomad_background` (all three seen in real saves, Nomad in the 2.31 example save). The
+editor switches both, and a Corpo → Nomad change was verified in-game.
 Corpo → Nomad → Corpo restores the original save data byte-for-byte.

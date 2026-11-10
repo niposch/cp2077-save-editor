@@ -172,29 +172,6 @@ function ResetPanel({ used, onRestore }: { used: boolean; onRestore: () => void 
   )
 }
 
-export function ChangesPanel() {
-  const { changes } = useOpenSave()
-  return (
-    <Panel>
-      <HudHeading className="mb-2" right={<span className="font-heading text-sm text-muted-foreground">{changes.length}</span>}>
-        Pending changes
-      </HudHeading>
-      {changes.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No changes yet.</p>
-      ) : (
-        <ol className="max-h-72 space-y-1 overflow-auto pr-1 text-sm">
-          {changes.map((c, i) => (
-            <li key={i} className="flex gap-2">
-              <span className="font-heading text-cyan-dim tabular-nums">{String(i + 1).padStart(2, "0")}</span>
-              <span className="break-all">{c}</span>
-            </li>
-          ))}
-        </ol>
-      )}
-    </Panel>
-  )
-}
-
 export function CharacterTab() {
   const { open, rev, mutate } = useOpenSave()
   const player = useMemo<PlayerData | null>(() => {
@@ -220,8 +197,8 @@ export function CharacterTab() {
   const points = player.points.filter((p) => p.key !== "secondary")
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(240px,280px)_1fr] xl:grid-cols-[minmax(240px,280px)_1fr_minmax(260px,300px)]">
-      <div className="space-y-6">
+    <div className="grid gap-6 xl:grid-cols-[minmax(240px,280px)_1fr]">
+      <div className="grid content-start gap-6 md:grid-cols-2 xl:grid-cols-1">
         <ProgressionPanel player={player} />
         <Panel>
           <HudHeading>Points</HudHeading>
@@ -249,10 +226,10 @@ export function CharacterTab() {
             ))}
           </div>
         </Panel>
-        <ResetPanel used={player.resetUsed} onRestore={restore} />
       </div>
 
-      <div className="mx-auto grid w-full max-w-[560px] min-w-[420px] grid-cols-3 gap-3 self-start">
+      <div className="mx-auto w-full max-w-[600px] space-y-6 self-start">
+      <div className="grid min-w-[420px] grid-cols-3 gap-3">
         {player.attributes.map((a) => (
           <AttributeTile key={a.key} a={a} onSet={(v) => setAttr(a.key, v)} />
         ))}
@@ -268,38 +245,11 @@ export function CharacterTab() {
           Attributes range from 3 to 20. Changing one doesn't refund or consume points; adjust points separately.
         </div>
       </div>
-
-      <div className="grid gap-6 sm:grid-cols-2 lg:col-span-2 xl:col-span-1 xl:grid-cols-1 xl:content-start">
+      <div className="grid gap-6 sm:grid-cols-2">
+        <ResetPanel used={player.resetUsed} onRestore={restore} />
         <LifePathPanel value={player.lifePath} />
-        <ChangesPanel />
-        <SaveInfoPanel />
+      </div>
       </div>
     </div>
-  )
-}
-
-function SaveInfoPanel() {
-  const { open } = useOpenSave()
-  const info = useMemo(() => open.session.info(), [open])
-  const m = open.meta
-  const rows: [string, string | number | undefined][] = [
-    ["Patch", m?.buildPatch],
-    ["Difficulty", m?.difficulty],
-    ["Save version", info.saveVersion],
-    ["Game version", info.gameVersion],
-    ["Sections", info.nodes],
-  ]
-  return (
-    <Panel>
-      <HudHeading className="mb-2">Save</HudHeading>
-      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
-        {rows.map(([k, v]) => (
-          <div key={k} className="contents">
-            <dt className="text-muted-foreground">{k}</dt>
-            <dd className="text-right font-heading font-medium">{v ?? "–"}</dd>
-          </div>
-        ))}
-      </dl>
-    </Panel>
   )
 }
