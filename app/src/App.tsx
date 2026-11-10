@@ -7,7 +7,7 @@ import { CharacterTab } from "@/components/character-tab"
 import { FactsTab } from "@/components/facts-tab"
 import { AdvancedTab } from "@/components/advanced-tab"
 import { SaveDialog } from "@/components/save-dialog"
-import { ChangesPanel, SaveInfoPanel } from "@/components/changes-panel"
+import { ChangesPanel, CompatibilityNotice, SaveInfoPanel } from "@/components/changes-panel"
 import { useSave, useOpenSave } from "@/state/save-context"
 import { platform } from "@/lib/storage"
 
@@ -68,6 +68,7 @@ function Editor() {
       </header>
       <main className="mx-auto grid w-full max-w-[1600px] gap-6 px-6 py-8 lg:grid-cols-[minmax(0,1fr)_280px]">
         <div className="min-w-0">
+          <CompatibilityNotice className="mb-6" />
           <TabsContent value="character">
             <CharacterTab />
           </TabsContent>
@@ -104,7 +105,10 @@ export default function App() {
       </header>
       <SaveBrowser />
       <footer className="mx-auto max-w-7xl px-6 pb-8 text-xs text-muted-foreground/80">
-        MIT licensed. Unofficial fan tool, not affiliated with or endorsed by CD PROJEKT RED. Cyberpunk 2077 is a trademark of CD
+        <a href="https://github.com/niposch/cp2077-save-editor" target="_blank" rel="noreferrer" className="text-cyan-dim hover:text-cyan">
+          Source on GitHub
+        </a>{" "}
+        · MIT licensed. Unofficial fan tool, not affiliated with or endorsed by CD PROJEKT RED. Cyberpunk 2077 is a trademark of CD
         PROJEKT S.A.
       </footer>
     </div>

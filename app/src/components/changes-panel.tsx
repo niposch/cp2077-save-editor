@@ -1,5 +1,6 @@
 import { useMemo } from "react"
-import { Undo2 } from "lucide-react"
+import { Undo2, TriangleAlert } from "lucide-react"
+import { cn } from "@/lib/utils"
 import { HudHeading, Panel } from "@/components/hud"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { useOpenSave } from "@/state/save-context"
@@ -57,7 +58,7 @@ export function SaveInfoPanel() {
     ["Patch", m?.buildPatch],
     ["Difficulty", m?.difficulty],
     ["Save version", info.saveVersion],
-    ["Game version", info.gameVersion],
+    ["Game version", `${info.gameVersionText} (${info.gameVersion})`],
     ["Sections", info.nodes],
   ]
   return (
@@ -72,5 +73,22 @@ export function SaveInfoPanel() {
         ))}
       </dl>
     </Panel>
+  )
+}
+
+/** Warns when the open save is from a game version outside the tested range. */
+export function CompatibilityNotice({ className }: { className?: string }) {
+  const { open } = useOpenSave()
+  const info = useMemo(() => open.session.info(), [open])
+  if (info.compatibility === "supported") return null
+  const text =
+    info.compatibility === "newer"
+      ? `This save is from game ${info.gameVersionText} (save version ${info.saveVersion}), newer than anything this editor has been tested with (up to ${info.testedUpTo}). A game patch may have changed the save format: edits can fail or produce a save the game won't load. Keep a backup and test the result before playing on.`
+      : `This save is from game ${info.gameVersionText}, before the 2.0 update. Attribute and level edits rely on the 2.0 progression system and aren't available; other edits are untested on old saves.`
+  return (
+    <div role="alert" className={cn("flex items-start gap-2 border border-gold/40 bg-gold/[0.07] px-3 py-2 text-sm text-gold/90", className)}>
+      <TriangleAlert className="mt-0.5 size-4 shrink-0" />
+      <span>{text}</span>
+    </div>
   )
 }

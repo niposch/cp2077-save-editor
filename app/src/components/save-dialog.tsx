@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
+import { CompatibilityNotice } from "@/components/changes-panel"
 import { useOpenSave } from "@/state/save-context"
 import { desktop, downloadZip, editedFiles, platform, suggestName } from "@/lib/storage"
 
@@ -85,6 +86,7 @@ export function SaveDialog({ open, onOpenChange }: { open: boolean; onOpenChange
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
+          <CompatibilityNotice />
           <div className="space-y-1.5">
             <Label htmlFor="save-name">Folder name</Label>
             <Input id="save-name" value={name} onChange={(e) => setName(e.target.value)} className="font-mono" spellCheck={false} />

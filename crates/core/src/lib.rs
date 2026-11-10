@@ -22,6 +22,29 @@ pub mod metadata;
 
 pub const CHUNK_SIZE: usize = 0x40000;
 
+/// Newest save format this editor has been verified against (game 2.5).
+pub const NEWEST_TESTED_SAVE_VERSION: u32 = 277;
+pub const NEWEST_TESTED_GAME_VERSION: u32 = 2500;
+/// Game 2.0 introduced the progression system the Character edits rely on.
+pub const OLDEST_SUPPORTED_GAME_VERSION: u32 = 2000;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Compatibility {
+    /// 2.0 – 2.5: the versions the edits were built and tested for.
+    Supported,
+    /// Newer than anything tested: a game patch may have changed the format.
+    Newer,
+    /// Before 2.0: the old progression system; most Character edits don't apply.
+    Older,
+}
+
+/// "2500" → "2.5", "2310" → "2.31", "1600" → "1.6"
+pub fn game_version_string(v: u32) -> String {
+    let minor = format!("{:03}", v % 1000);
+    let minor = minor.trim_end_matches('0');
+    format!("{}.{}", v / 1000, if minor.is_empty() { "0" } else { minor })
+}
+
 #[derive(Debug, Clone)]
 pub struct Header {
     pub save_version: u32,
@@ -132,6 +155,18 @@ fn i32_at(b: &[u8], p: usize) -> Result<i32> {
 }
 
 // ---------------------------------------------------------------- container
+
+impl Header {
+    pub fn compatibility(&self) -> Compatibility {
+        if self.save_version > NEWEST_TESTED_SAVE_VERSION || self.game_version > NEWEST_TESTED_GAME_VERSION {
+            Compatibility::Newer
+        } else if self.game_version < OLDEST_SUPPORTED_GAME_VERSION {
+            Compatibility::Older
+        } else {
+            Compatibility::Supported
+        }
+    }
+}
 
 impl SaveFile {
     pub fn parse(file: &[u8]) -> Result<Self> {

@@ -32,7 +32,7 @@ under a new name (e.g. `ManualSave-99`) and load it. Keep a backup.
 |---|---|---|
 | `--attr` | `PlayerDevelopmentData.attributes[attributeName=X].value` **and** the attribute's `gameConstantStatModifier` in StatsSystem's `sharedDataBuffer`; also `metadata.9.json` | ✅ works |
 | `--points` | `PlayerDevelopmentData.devPoints[type=T].unspent` (attribute = entry without `type`, perk = `Primary`, relic = `Espionage`) | ✅ works |
-| `--level` | `proficiencies[type=Level].currentLevel` (+ `currentExp` → 0), the `Level` stat modifier in StatsSystem, `LevelAssignmentSystem_Ver1` (float), metadata `level` | ✅ works |
+| `--level` | `proficiencies[type=Level].currentLevel` (+ `currentExp` → 0), the `Level` stat modifier in StatsSystem, `LevelAssignmentSystem_Ver1` (float), metadata `level`; ±1 unspent attribute and perk point per level | ✅ works |
 | `--street-cred` | `proficiencies[type=StreetCred].currentLevel` (+ `currentExp` → 0), the `StreetCred` stat modifier, metadata `streetCred` | ✅ works |
 | `--life-path` | `PlayerDevelopmentData.lifePath` (absent = Corporate) and the facts `q000_corpo/nomad/street_kid_background`; metadata `lifePath` | ✅ works |
 | `--money` | quantity of V's `Items.money` item ([inventory.md](inventory.md)) | ✅ works |
@@ -49,7 +49,9 @@ Safety checks:
 * `PlayerDevelopmentData` is selected by `ownerID.hash=1` (V). Older saves contain several
   copies for NPCs.
 
-Changing the level doesn't grant the points a real level-up would; set them with `--points`.
+Changing the level grants (or, when lowering, takes back unspent) one attribute point and one perk
+point per level, like a real level-up. If points were already spent, lowering the level warns
+instead of going negative.
 Difficulty isn't stored in the save. It's an in-game setting, so it's not part of the editor.
 
 Changing an attribute doesn't touch `devPoints.spent` for attributes. The game doesn't seem to

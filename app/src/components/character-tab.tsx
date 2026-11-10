@@ -63,8 +63,13 @@ const LIFE_PATHS: { value: LifePath; label: string }[] = [
 function ProgressionPanel({ player }: { player: PlayerData }) {
   const { mutate } = useOpenSave()
   const setProg = (key: ProgressionKey, label: string, v: number) => {
-    const warn = mutate(`Couldn't set ${label}`, (s) => s.setProgression(key, v))
-    if (warn) toast.warning(warn)
+    const r = mutate(`Couldn't set ${label}`, (s) => s.setProgression(key, v))
+    if (!r) return
+    if (r.points.length) {
+      const fmt = (p: { label: string; old: number; new: number }) => `${p.new - p.old > 0 ? "+" : ""}${p.new - p.old} ${p.label}`
+      toast(`Level ${v}: ${r.points.map(fmt).join(", ")}`)
+    }
+    if (r.warning) toast.warning(r.warning)
   }
   const row = "flex flex-wrap items-center justify-between gap-x-2 gap-y-1"
   return (
@@ -77,8 +82,8 @@ function ProgressionPanel({ player }: { player: PlayerData }) {
               <span className="hud-label text-sm text-cyan">Level</span>
             </TooltipTrigger>
             <TooltipContent className="max-w-64">
-              1–60. XP towards the next level resets to 0. Changing the level here doesn't grant the attribute and perk points a
-              level-up would; adjust those below.
+              1–60. Like in the game, each level gained adds 1 attribute point and 1 perk point (each level removed takes back
+              unspent ones). XP towards the next level resets to 0.
             </TooltipContent>
           </Tooltip>
           <Stepper label="Level" value={player.level ?? 1} min={1} max={60} onCommit={(v) => setProg("level", "level", v)} valueClassName="text-2xl text-cyan" />

@@ -148,7 +148,15 @@ fn life_path_of(pkg: &Package) -> String {
 pub struct ProgressionEdit {
     pub old: Option<i64>,
     pub warning: Option<String>,
+    /// Unspent point pools adjusted by a level change: (description, old, new).
+    pub points: Vec<(String, i64, i64)>,
 }
+
+/// Development points the game grants per character level-up: (devPoints type, description).
+/// One attribute point and one perk point per level. Verified from saves: the attribute pool
+/// (spent + unspent, excluding the 7 from character creation) equals level − 1 in both a level-48
+/// 2.5 save and a level-32 1.6 save.
+pub const LEVEL_UP_POINTS: &[(&str, &str)] = &[("", "attribute points"), ("Primary", "perk points")];
 
 impl SaveFile {
     pub fn package(&self, node: &str) -> Result<PackageNode> {
@@ -252,6 +260,8 @@ impl SaveFile {
         ensure!((1..=max).contains(&value), "{ty} must be 1..={max} (the game's own range)");
         let (off, modval) = self.stat_modifier(ty)?;
         let las = if ty == "Level" { Some(self.level_assignment()?) } else { None };
+        let mut points = Vec::new();
+        let mut shortfall = Vec::new();
         let old = self.edit_package(SSC, |p| {
             let base = format!("{PDD}.proficiencies[type={ty}]");
             let old = match p.set_path(&format!("{base}.currentLevel"), &value.to_string())? {
@@ -262,17 +272,42 @@ impl SaveFile {
             if p.get_path(&format!("{base}.currentExp"))?.is_some() {
                 p.set_path(&format!("{base}.currentExp"), "0")?;
             }
+            // Level-ups grant points like the game does; level-downs take back unspent ones.
+            let delta = value as i64 - old.unwrap_or(1);
+            if ty == "Level" && delta != 0 {
+                for (kind, desc) in LEVEL_UP_POINTS {
+                    let path = format!("{PDD}.devPoints[type={kind}].unspent");
+                    let cur = int_of(p.get_path(&path)?).unwrap_or(0);
+                    let new = (cur + delta).max(0);
+                    if cur + delta < 0 {
+                        shortfall.push(format!("{} {desc}", -(cur + delta)));
+                    }
+                    if new != cur {
+                        p.set_path(&path, &new.to_string())?;
+                        points.push((desc.to_string(), cur, new));
+                    }
+                }
+            }
             Ok(old)
         })?;
-        let warning = old.filter(|o| (*o as f32 - modval).abs() > 0.01).map(|o| {
-            format!("{ty} was {o} in PlayerDevelopmentData but {modval} in StatsSystem; both now {value}")
-        });
+        let mut warnings: Vec<String> = old
+            .filter(|o| (*o as f32 - modval).abs() > 0.01)
+            .map(|o| format!("{ty} was {o} in PlayerDevelopmentData but {modval} in StatsSystem; both now {value}"))
+            .into_iter()
+            .collect();
+        if !shortfall.is_empty() {
+            warnings.push(format!(
+                "{} were already spent, so lowering the level couldn't take them back; lower attributes/perks or use Reset Attributes in-game",
+                shortfall.join(" and ")
+            ));
+        }
+        let warning = (!warnings.is_empty()).then(|| warnings.join(". "));
         let si = self.find_node("StatsSystem").unwrap();
         self.node_bytes_mut(si)[off..off + 4].copy_from_slice(&(value as f32).to_le_bytes());
         if let Some((ni, _)) = las {
             self.node_bytes_mut(ni)[4..8].copy_from_slice(&(value as f32).to_le_bytes());
         }
-        Ok(ProgressionEdit { old, warning })
+        Ok(ProgressionEdit { old, warning, points })
     }
 
     /// `LevelAssignmentSystem_Ver1`: `u32 nodeId, f32 playerLevel, u8`. Returns (node index, level).

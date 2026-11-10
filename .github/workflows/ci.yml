@@ -1,0 +1,31 @@
+# Tests the save format code against the bundled example save on every push / PR.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      # the desktop crate needs WebKitGTK on Linux; the save logic lives in these three
+      - run: cargo test -p cp2077-save -p cp2077-save-wasm -p cp2077-save-cli
+
+      - name: Round-trip the example save
+        run: |
+          cargo build --release -p cp2077-save-cli
+          ./target/release/cp2077-save roundtrip examples/ManualSave-818
+          ./target/release/cp2077-save pkg-check examples/ManualSave-818
+          ./target/release/cp2077-save player examples/ManualSave-818
+          ./target/release/cp2077-save edit examples/ManualSave-818 /tmp/edited \
+            --attr cool=15 --points perk=10 --money 1234 --life-path corpo --unlock-reset
+          ./target/release/cp2077-save player /tmp/edited
+          ./target/release/cp2077-save pkg-check /tmp/edited

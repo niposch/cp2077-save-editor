@@ -154,6 +154,22 @@ fn main() -> Result<()> {
     Ok(())
 }
 
+fn warn_compatibility(s: &SaveFile) {
+    use cp2077_save::{game_version_string as gv, Compatibility, NEWEST_TESTED_GAME_VERSION};
+    let v = gv(s.header.game_version);
+    match s.header.compatibility() {
+        Compatibility::Supported => {}
+        Compatibility::Newer => eprintln!(
+            "warning: this save is from game {v} (save version {}), newer than the newest tested version ({}).              A patch may have changed the format; keep a backup.",
+            s.header.save_version,
+            gv(NEWEST_TESTED_GAME_VERSION)
+        ),
+        Compatibility::Older => {
+            eprintln!("warning: this save is from game {v}, before 2.0; attribute and level edits aren't supported for it.")
+        }
+    }
+}
+
 fn split_kv(s: &str) -> Result<(&str, &str)> {
     s.rsplit_once('=').with_context(|| format!("expected key=value, got {s:?}"))
 }
@@ -163,6 +179,7 @@ fn edit(src: &Path, dst: &Path, ops: &[&str]) -> Result<()> {
         bail!("no edit operations given (see --help)");
     }
     let mut s = load(src)?;
+    warn_compatibility(&s);
     let mut meta: Vec<(String, String)> = Vec::new();
     let mut it = ops.iter();
     while let Some(&op) = it.next() {
@@ -194,6 +211,9 @@ fn edit(src: &Path, dst: &Path, ops: &[&str]) -> Result<()> {
                     eprintln!("warning: {w}");
                 }
                 println!("{ty}: {} -> {v}", r.old.map_or("default".into(), |o| o.to_string()));
+                for (desc, o, n) in &r.points {
+                    println!("  {desc} (unspent): {o} -> {n}");
+                }
                 meta.push((meta_key.to_string(), format!("{v}.0")));
             }
             "--life-path" => {

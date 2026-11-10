@@ -76,6 +76,15 @@ every identifier in `final.redscripts`. `LevelAssignmentSystem_Ver1` was found b
 level-48 and a level-32 save. The skill levels (Headhunter etc.) sit in the same block, so they
 could be edited the same way, but their milestone rewards are granted on level-up and wouldn't follow.
 
+### Level-up points
+
+Each character level-up grants **1 attribute point and 1 perk point** (street cred grants none).
+Verified from saves: the attribute pool (spent + unspent, excluding the 7 from character creation)
+is exactly level − 1 in a level-48 2.5 save and a level-32 1.6 save. Perk totals are higher than
+level − 1 because skill progression also grants perk points (at skill levels 15 and 35 in each of
+the five skills) and perk shards add more. The editor's level edit only adds/removes the
+level-up share.
+
 ## Life path
 
 `PlayerDevelopmentData.lifePath: gamedataLifePath`. `Corporate` is the enum's first value, so Corpo

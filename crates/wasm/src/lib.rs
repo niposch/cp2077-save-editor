@@ -11,7 +11,7 @@ use cp2077_save::{
     package::{array_elem, PackageNode, Struct, Value},
     inventory::MONEY_MAX,
     player::{resolve_attribute, resolve_life_path, resolve_point_kind, resolve_progression, ATTRIBUTES, POINT_KINDS, SSC},
-    SaveFile,
+    game_version_string, Compatibility, SaveFile, NEWEST_TESTED_GAME_VERSION,
 };
 use serde_json::{json, Value as J};
 use std::collections::HashMap;
@@ -124,6 +124,18 @@ impl Session {
         self.meta.push((key.to_string(), value));
     }
 
+    /// Unspent (attribute, perk) points, for reporting what a level change granted.
+    fn points_snapshot(&self) -> Vec<(String, i64)> {
+        let p = self.save.player_summary().ok();
+        ["attribute points", "perk points"]
+            .iter()
+            .map(|d| {
+                let v = p.as_ref().and_then(|p| p.points.iter().find(|x| x.0 == *d)).and_then(|x| x.2).unwrap_or(0);
+                (d.to_string(), v)
+            })
+            .collect()
+    }
+
     fn fact_value(&self, key: &str) -> anyhow::Result<String> {
         Ok(self.save.get_fact(parse_fact_key(key)?)?.map_or("unset".into(), |f| f.1.to_string()))
     }
@@ -192,7 +204,10 @@ impl Session {
         self.cache.clear();
         match self.changes.iter().position(|c| c.target == r.target) {
             Some(i) if self.changes[i].old == r.new => {
-                self.changes.remove(i);
+                // Back at the original value: rebuild from the original save so side effects of the
+                // intermediate edits (reset XP, granted level-up points, ...) disappear as well.
+                let ops: Vec<Op> = self.changes.iter().enumerate().filter(|(j, _)| *j != i).map(|(_, c)| c.op.clone()).collect();
+                self.rebuild(ops)?;
             }
             Some(i) => {
                 self.changes[i].new = r.new.clone();
@@ -203,6 +218,17 @@ impl Session {
             None => self.changes.push(Change { target: r.target.clone(), old: r.old.clone(), new: r.new, op }),
         }
         Ok((r.old, r.warning))
+    }
+
+    /// Replace the state with the original save plus `ops` replayed in order.
+    /// Only commits if every op re-applies.
+    fn rebuild(&mut self, ops: Vec<Op>) -> anyhow::Result<()> {
+        let mut next = Session::fresh(self.original.clone())?;
+        for op in ops {
+            next.record(op)?;
+        }
+        *self = next;
+        Ok(())
     }
 
     fn fresh(original: Vec<u8>) -> anyhow::Result<Session> {
@@ -219,12 +245,20 @@ impl Session {
         Session::fresh(sav.to_vec()).map_err(err)
     }
 
-    /// `{ saveVersion, gameVersion, archiveVersion, nodes, dataSize }`
+    /// `{ saveVersion, gameVersion, gameVersionText, compatibility, testedUpTo, ... }`
     pub fn info(&self) -> String {
         let h = &self.save.header;
+        let compat = match h.compatibility() {
+            Compatibility::Supported => "supported",
+            Compatibility::Newer => "newer",
+            Compatibility::Older => "older",
+        };
         json!({
             "saveVersion": h.save_version,
             "gameVersion": h.game_version,
+            "gameVersionText": game_version_string(h.game_version),
+            "compatibility": compat,
+            "testedUpTo": game_version_string(NEWEST_TESTED_GAME_VERSION),
             "archiveVersion": h.archive_version,
             "nodes": self.save.nodes.len(),
             "dataSize": self.save.data.len(),
@@ -268,9 +302,20 @@ impl Session {
         Ok(self.record(Op::Attribute(name.into(), value)).map_err(err)?.1.unwrap_or_default())
     }
 
-    /// Set level ("level", 1..=60) or street cred ("streetcred", 1..=50). Returns a warning or "".
+    /// Set level ("level", 1..=60) or street cred ("streetcred", 1..=50).
+    /// Returns `{ warning, points: [{ label, old, new }] }`; level changes grant/remove the
+    /// attribute and perk points a level-up gives.
     pub fn set_progression(&mut self, key: &str, value: i32) -> R<String> {
-        Ok(self.record(Op::Progression(key.into(), value)).map_err(err)?.1.unwrap_or_default())
+        let before = self.points_snapshot();
+        let (_, warning) = self.record(Op::Progression(key.into(), value)).map_err(err)?;
+        let after = self.points_snapshot();
+        let points: Vec<J> = before
+            .iter()
+            .zip(&after)
+            .filter(|(b, a)| b.1 != a.1)
+            .map(|(b, a)| json!({ "label": b.0, "old": b.1, "new": a.1 }))
+            .collect();
+        Ok(json!({ "warning": warning, "points": points }).to_string())
     }
 
     /// Set the life path (corpo/nomad/streetkid).
@@ -365,14 +410,8 @@ impl Session {
         if i >= self.changes.len() {
             return Err(JsError::new("no such change"));
         }
-        let mut next = Session::fresh(self.original.clone()).map_err(err)?;
-        for (j, c) in self.changes.iter().enumerate() {
-            if j != i {
-                next.record(c.op.clone()).map_err(|e| err(e.context(format!("re-applying {}", c.target))))?;
-            }
-        }
-        *self = next;
-        Ok(())
+        let ops: Vec<Op> = self.changes.iter().enumerate().filter(|(j, _)| *j != i).map(|(_, c)| c.op.clone()).collect();
+        self.rebuild(ops).map_err(|e| err(e.context("re-applying the remaining changes")))
     }
 
     /// Serialize the edited save.
@@ -402,15 +441,24 @@ mod tests {
     use super::*;
 
     fn sample() -> Option<Vec<u8>> {
-        // project-local copy of a real save (git-ignored); skip when absent
-        std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/../../saves/ManualSave-17/sav.dat")).ok()
+        // a real save: the project-local copy (git-ignored) or the bundled example save
+        let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../../");
+        ["saves/ManualSave-17/sav.dat", "examples/ManualSave-818/sav.dat"]
+            .iter()
+            .find_map(|p| std::fs::read(format!("{root}{p}")).ok())
+    }
+
+    fn level_of(s: &mut Session) -> i32 {
+        serde_json::from_str::<J>(&s.player().unwrap()).unwrap()["level"].as_i64().unwrap() as i32
     }
 
     #[test]
     fn revert_one_change_equals_never_making_it() {
         let Some(orig) = sample() else { return };
         let mut s = Session::new(&orig).unwrap();
-        s.set_progression("level", 50).unwrap();
+        let (level0, money0) = (level_of(&mut s), s.save.money().unwrap());
+        let level = if level0 < 60 { level0 + 1 } else { level0 - 1 };
+        s.set_progression("level", level).unwrap();
         s.set_money(1).unwrap();
         s.set_attribute("cool", 15).unwrap();
         s.set_attribute("cool", 16).unwrap(); // merged into one change
@@ -418,14 +466,13 @@ mod tests {
 
         s.revert(1).unwrap(); // money
         let mut expected = Session::new(&orig).unwrap();
-        expected.set_progression("level", 50).unwrap();
+        expected.set_progression("level", level).unwrap();
         expected.set_attribute("cool", 16).unwrap();
         assert!(s.save.data == expected.save.data, "revert must equal never having made the change");
         assert_eq!(s.meta, expected.meta);
-        assert_eq!(s.save.money().unwrap(), Some(345579));
+        assert_eq!(s.save.money().unwrap(), money0);
         let targets: Vec<&str> = s.changes.iter().map(|c| c.target.as_str()).collect();
         assert_eq!(targets, ["Level", "Cool"]);
-        assert_eq!(s.changes[1].old, "20");
 
         s.revert(1).unwrap();
         s.revert(0).unwrap();
@@ -435,13 +482,39 @@ mod tests {
     }
 
     #[test]
+    fn level_up_grants_points_and_going_back_restores_everything() {
+        let Some(orig) = sample() else { return };
+        let mut s = Session::new(&orig).unwrap();
+        let pts = |s: &mut Session, k: &str| -> i64 {
+            let p: J = serde_json::from_str(&s.player().unwrap()).unwrap();
+            p["points"].as_array().unwrap().iter().find(|x| x["key"] == k).unwrap()["unspent"].as_i64().unwrap_or(0)
+        };
+        let (a0, p0) = (pts(&mut s, "attribute"), pts(&mut s, "perk"));
+        let level0 = level_of(&mut s);
+        let up = if level0 <= 58 { 2 } else { 0 };
+        if up == 0 {
+            return; // already at the cap; nothing to level up
+        }
+        s.set_progression("level", level0 + up).unwrap();
+        assert_eq!((pts(&mut s, "attribute"), pts(&mut s, "perk")), (a0 + up as i64, p0 + up as i64));
+        s.set_progression("level", level0).unwrap();
+        assert!(s.changes.is_empty());
+        let fresh = SaveFile::parse(&orig).unwrap();
+        assert!(s.save.data == fresh.data, "returning to the original level must restore XP and points exactly");
+    }
+
+    #[test]
     fn editing_back_to_original_drops_the_change() {
         let Some(orig) = sample() else { return };
         let mut s = Session::new(&orig).unwrap();
-        s.set_points("perk", 9).unwrap();
-        s.set_points("perk", 4).unwrap();
+        let p: J = serde_json::from_str(&s.player().unwrap()).unwrap();
+        let perk0 = p["points"].as_array().unwrap().iter().find(|x| x["key"] == "perk").unwrap()["unspent"].as_i64().unwrap_or(0) as i32;
+        s.set_points("perk", perk0 + 5).unwrap();
+        s.set_points("perk", perk0).unwrap();
         assert!(s.changes.is_empty());
-        assert!(!s.unlock_reset().unwrap()); // already available: nothing to list
-        assert!(s.changes.is_empty());
+        if !p["resetUsed"].as_bool().unwrap() {
+            assert!(!s.unlock_reset().unwrap()); // already available: nothing to list
+            assert!(s.changes.is_empty());
+        }
     }
 }

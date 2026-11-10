@@ -13,6 +13,11 @@ export function initCore() {
 export interface SaveInfo {
   saveVersion: number
   gameVersion: number
+  /** e.g. "2.5" */
+  gameVersionText: string
+  /** "supported" = 2.0–2.5 (tested); "newer" = from a later patch; "older" = before 2.0 */
+  compatibility: "supported" | "newer" | "older"
+  testedUpTo: string
   archiveVersion: number
   nodes: number
   dataSize: number
@@ -34,6 +39,12 @@ export interface PlayerData {
 }
 
 export type LifePath = "Corporate" | "Nomad" | "StreetKid"
+
+export interface ProgressionResult {
+  warning: string | null
+  /** Unspent point pools changed by a level change. */
+  points: { label: string; old: number; new: number }[]
+}
 export type ProgressionKey = "level" | "streetcred"
 
 /** A pending change: `target: old → new` (repeated edits of one target are merged). */
@@ -84,9 +95,9 @@ export class SaveSession {
   setPoints(key: PointKey, value: number) {
     this.s.set_points(key, value)
   }
-  /** Returns a warning message, or "" */
-  setProgression(key: ProgressionKey, value: number): string {
-    return this.s.set_progression(key, value)
+  /** Level changes also grant/remove the points a level-up gives; those are reported back. */
+  setProgression(key: ProgressionKey, value: number): ProgressionResult {
+    return JSON.parse(this.s.set_progression(key, value))
   }
   setLifePath(lp: LifePath) {
     this.s.set_life_path(lp)
