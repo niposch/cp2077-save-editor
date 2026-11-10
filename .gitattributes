@@ -1,0 +1,2 @@
+# Example saves are redistributed byte-for-byte; never convert line endings.
+examples/** -text
