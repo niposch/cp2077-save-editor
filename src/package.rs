@@ -106,7 +106,7 @@ fn is_ref(t: &str) -> bool {
 fn is_str(t: &str) -> bool {
     matches!(t, "NodeRef" | "String")
 }
-fn array_elem(t: &str) -> Option<&str> {
+pub fn array_elem(t: &str) -> Option<&str> {
     if let Some(e) = t.strip_prefix("array:") {
         return Some(e);
     }

@@ -7,7 +7,9 @@ A save reader/writer for Cyberpunk 2077, built by reverse engineering game 2.5 s
 * Container (decompress / recompress / node tree / node resizing): done, round-trips exactly.
 * Quest facts: read/write. **Restoring the once-per-playthrough attribute reset works in-game.**
 * Embedded object packages (ScriptableSystemsContainer, StatsSystem, ...): generic reader +
-  writer, byte-exact round trip on all test saves. No editing commands on top yet.
+  writer, byte-exact round trip on all test saves, path-based get/set.
+* Player edits: attributes (kept in sync with StatsSystem), attribute/perk/relic points.
+  See [docs/editing.md](docs/editing.md).
 * Not decoded yet: `inventory`/`itemData`, `PersistencySystem2`, `DataBuffer` contents, and more.
 
 ## Usage
@@ -26,17 +28,21 @@ target/release/cp2077-save <command> ...
 | `diff <a/sav.dat> <b/sav.dat>` | which leaf nodes differ |
 | `roundtrip <sav.dat> [out]` | decompress + recompress check |
 | `facts <sav.dat> [-v]` / `get-fact <sav.dat> <name\|0xHASH>` | quest facts |
-| `set-fact <in_dir> <out_dir> <name\|0xHASH> <value>` | write a fact |
-| `remove-fact <in_dir> <out_dir> <name\|0xHASH>` | delete a fact |
-| `unlock-reset <in_dir> <out_dir>` | restore the "Reset Attributes" button |
+| `player <save>` | level, attributes, points, reset status |
 | `pkg-dump <sav.dat> <NodeName> [ChunkType]` | readable dump of an object package |
+| `pkg-get <save> <NodeName> <path>` | one value from a package |
 | `pkg-check <sav.dat>` | parse + re-serialize every package node, require identical bytes |
+| `edit <in_dir> <out_dir> [ops]` | `--attr`, `--points`, `--unlock-reset`, `--fact`, `--remove-fact`, `--set` ([docs/editing.md](docs/editing.md)) |
+| `set-fact` / `remove-fact` / `unlock-reset <in_dir> <out_dir> ...` | single-op shortcuts |
+
+Every command also accepts a save folder where it says `<sav.dat>`. Run with `--help` for the full list.
 
 Edit commands never modify their input: they write a new save folder and refuse to overwrite.
 Copy the result into `%USERPROFILE%\Saved Games\CD Projekt Red\Cyberpunk 2077\` yourself.
 
 ## Documentation
 
+* [docs/editing.md](docs/editing.md): how to edit, path syntax, what each edit touches
 * [docs/save-container.md](docs/save-container.md): `sav.dat` layout, compression, node tree, version gates
 * [docs/facts.md](docs/facts.md): quest facts and `ResetAttributeDisabled`
 * [docs/package-format.md](docs/package-format.md): embedded RTTI object packages
@@ -49,6 +55,9 @@ Copy the result into `%USERPROFILE%\Saved Games\CD Projekt Red\Cyberpunk 2077\` 
 src/lib.rs       container reader/writer, node tree, node resizing
 src/facts.rs     FactsDB / FactsTable
 src/package.rs   embedded object packages
+src/edit.rs      path-based get/set (with insertion of omitted fields)
+src/player.rs    player-level edits (attributes, points)
+src/savedir.rs   writing a new save folder + metadata patches
 src/main.rs      CLI
 re/              Python RE helpers (pefile + capstone)
 docs/            findings

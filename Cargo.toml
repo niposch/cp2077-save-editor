@@ -5,4 +5,5 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1.0.104"
+crc32fast = "1.5.5"
 lz4_flex = "0.14.0"

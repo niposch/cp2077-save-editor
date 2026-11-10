@@ -15,6 +15,9 @@ use anyhow::{bail, ensure, Context, Result};
 
 pub mod facts;
 pub mod package;
+pub mod edit;
+pub mod player;
+pub mod savedir;
 
 pub const CHUNK_SIZE: usize = 0x40000;
 
