@@ -24,16 +24,8 @@ const TAB_TRIGGER =
   "hud-label rounded-none px-3 text-[15px] !text-salmon/80 hover:!text-salmon data-active:!text-cyan after:!bg-cyan after:!bottom-[-9px]"
 
 function Editor() {
-  const { open, changes, close, discard, rev } = useOpenSave()
+  const { open, changes, close, discard, player } = useOpenSave()
   const [saveOpen, setSaveOpen] = useState(false)
-  const player = (() => {
-    try {
-      return open.session.player()
-    } catch {
-      return null
-    }
-  })()
-  void rev
 
   return (
     <Tabs defaultValue="character" className="min-h-screen gap-0">

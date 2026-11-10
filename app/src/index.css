@@ -119,26 +119,46 @@
     --cut: 6px;
   }
 
-  /* Panel with cut corners and a 1px border (border drawn via an inset layer, since clip-path cuts borders). */
+  /*
+   * Panel with cut top-left / bottom-right corners and a 1px border.
+   * The straight edges are a real CSS border, so the browser snaps them to device pixels and
+   * they stay visible at fractional element sizes (a clipped 1px layer can vanish between pixel
+   * rows). clip-path removes the border at the two cut corners; ::before/::after draw those
+   * diagonal edges as 1px lines along the cut, extending inward.
+   */
   .hud-panel {
     --cut: 12px;
+    --edge: var(--border);
     position: relative;
+    border: 1px solid var(--edge);
     background: linear-gradient(180deg, oklch(0.2 0.04 16 / 0.92), oklch(0.16 0.03 14 / 0.92));
     clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
   }
-  .hud-panel::before {
+  .hud-panel::before,
+  .hud-panel::after {
     content: "";
     position: absolute;
-    inset: 0;
+    z-index: 1;
+    width: calc(var(--cut) * 1.41421);
+    height: 1px;
+    background: var(--edge);
     pointer-events: none;
-    background: var(--border);
-    clip-path: polygon(
-      var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut),
-      1px calc(var(--cut) + 0.4px), 1px calc(100% - 1px), calc(100% - var(--cut) - 0.4px) calc(100% - 1px),
-      calc(100% - 1px) calc(100% - var(--cut) - 0.4px), calc(100% - 1px) 1px, calc(var(--cut) + 0.4px) 1px, 1px calc(var(--cut) + 0.4px)
-    );
+    transform-origin: 0 0;
   }
-  .hud-panel.is-active::before {
-    background: var(--cyan-dim);
+  /* (positions are relative to the padding box, i.e. 1px inside the border box) */
+  .hud-panel::before {
+    /* top-left cut: border-box (0, cut) → (cut, 0) */
+    left: -1px;
+    top: calc(var(--cut) - 1px);
+    transform: rotate(-45deg);
+  }
+  .hud-panel::after {
+    /* bottom-right cut: border-box (W, H - cut) → (W - cut, H) */
+    left: calc(100% + 1px);
+    top: calc(100% + 1px - var(--cut));
+    transform: rotate(135deg);
+  }
+  .hud-panel.is-active {
+    --edge: var(--cyan-dim);
   }
 }

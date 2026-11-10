@@ -59,6 +59,13 @@ copies it into `dist/examples` for web builds. Desktop builds (run by the Tauri 
 
 ## Interaction details
 
+* −/+ clicks and ↑/↓ update the shown number instantly and are applied as one edit once you
+  pause (250 ms), or immediately on blur, Enter or when the field goes away (e.g. switching tabs).
+  Each applied edit takes ~15 ms: enum-type knowledge is kept between package parses (one pass
+  instead of two or more), the stats buffer is indexed in one scan, and the player summary is
+  computed once per edit and shared.
+* Panels draw their straight edges with a real CSS border (pixel-snapped, so it never disappears at
+  fractional sizes) and only the two cut corners as 1px diagonal lines.
 * Number fields are always real inputs with a fixed width: focusing never shifts the layout,
   Tab moves between fields (the −/+ buttons are skipped), the value is selected on focus so typing
   replaces it, ↑/↓ step, Enter commits, Esc reverts. Out-of-range values are clamped.

@@ -11,6 +11,7 @@ use crate::edit::{scalar_str, SetResult};
 use crate::package::{Package, PackageNode, Value};
 use crate::SaveFile;
 use anyhow::{bail, ensure, Context, Result};
+use std::collections::HashMap;
 
 pub const SSC: &str = "ScriptableSystemsContainer";
 /// The player's PlayerDevelopmentData (older saves also hold NPC copies). Entity ID 1 = V.
@@ -67,6 +68,23 @@ fn int_of(v: Option<&Value>) -> Option<i64> {
         Value::I32(x) => Some(*x as i64),
         other => scalar_str(other)?.parse().ok(),
     }
+}
+
+struct ModifierIndex {
+    node: usize,
+    by_hash: HashMap<u64, Vec<usize>>,
+}
+
+/// (offset of the f32 within the StatsSystem node, value) of the player's modifier for `stat`.
+fn lookup_modifier(index: &ModifierIndex, b: &[u8], stat: &str) -> Result<(usize, f32)> {
+    let hits = index.by_hash.get(&fnv1a64(stat)).map_or(&[][..], |v| v.as_slice());
+    ensure!(
+        hits.len() == 1,
+        "expected exactly one {stat} stat modifier in StatsSystem, found {} (only supported for 2.x saves)",
+        hits.len()
+    );
+    let off = hits[0];
+    Ok((off, f32::from_le_bytes(b[off..off + 4].try_into()?)))
 }
 
 #[derive(Debug)]
@@ -154,33 +172,45 @@ impl SaveFile {
     /// Locate the player's constant stat modifier for `stat` in StatsSystem:
     /// (offset of the f32 value within the node, value).
     fn stat_modifier(&self, stat: &str) -> Result<(usize, f32)> {
-        let i = self.find_node("StatsSystem").context("no StatsSystem node")?;
-        let b = self.node_bytes(i);
-        let mut pat = CONST_MOD_TAG.to_vec();
-        pat.extend_from_slice(&fnv1a64(stat).to_le_bytes());
-        let hits: Vec<usize> = b.windows(pat.len()).enumerate().filter(|(_, w)| *w == pat.as_slice()).map(|(i, _)| i).collect();
-        ensure!(
-            hits.len() == 1,
-            "expected exactly one {stat} stat modifier in StatsSystem, found {} (only supported for 2.x saves)",
-            hits.len()
-        );
-        let off = hits[0] + pat.len() + 4; // skip u32 modifier type
-        let v = f32::from_le_bytes(b[off..off + 4].try_into()?);
-        Ok((off, v))
+        let index = self.const_modifier_index()?;
+        lookup_modifier(&index, self.node_bytes(index.node), stat)
+    }
+
+    /// One pass over StatsSystem: offsets of every `gameConstantStatModifier` value, by stat hash.
+    fn const_modifier_index(&self) -> Result<ModifierIndex> {
+        let node = self.find_node("StatsSystem").context("no StatsSystem node")?;
+        let b = self.node_bytes(node);
+        let mut by_hash: HashMap<u64, Vec<usize>> = HashMap::new();
+        let mut pos = 0;
+        while let Some(off) = b[pos..].iter().position(|&x| x == CONST_MOD_TAG[0]) {
+            let at = pos + off;
+            pos = at + 1;
+            if b[at..].starts_with(CONST_MOD_TAG) && at + CONST_MOD_TAG.len() + 16 <= b.len() {
+                let h = u64::from_le_bytes(b[at + CONST_MOD_TAG.len()..at + CONST_MOD_TAG.len() + 8].try_into()?);
+                // value follows the u64 stat hash and the u32 modifier type
+                by_hash.entry(h).or_default().push(at + CONST_MOD_TAG.len() + 12);
+            }
+        }
+        Ok(ModifierIndex { node, by_hash })
     }
 
     pub fn player_summary(&self) -> Result<PlayerSummary> {
-        let pkg = self.package(SSC)?.package;
+        self.player_summary_with(&self.package(SSC)?.package)
+    }
+
+    /// Player summary from an already parsed ScriptableSystemsContainer package.
+    pub fn player_summary_with(&self, pkg: &Package) -> Result<PlayerSummary> {
         let get = |p: &str| pkg.get_path(&format!("{PDD}.{p}")).ok().flatten();
         let mut s = PlayerSummary {
             level: int_of(get("proficiencies[type=Level].currentLevel")),
             street_cred: int_of(get("proficiencies[type=StreetCred].currentLevel")),
-            life_path: Some(life_path_of(&pkg)),
+            life_path: Some(life_path_of(pkg)),
             ..Default::default()
         };
+        let index = self.const_modifier_index().ok();
         for (_, stat, _) in ATTRIBUTES {
             let v = int_of(get(&format!("attributes[attributeName={stat}].value")));
-            let m = self.stat_modifier(stat).ok().map(|x| x.1);
+            let m = index.as_ref().and_then(|ix| lookup_modifier(ix, self.node_bytes(ix.node), stat).ok()).map(|x| x.1);
             s.attributes.push((stat.to_string(), v, m));
         }
         for (_, ty, desc) in POINT_KINDS {

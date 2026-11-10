@@ -1,4 +1,3 @@
-import { useMemo } from "react"
 import { RotateCcw, TriangleAlert, CircleCheck } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -173,14 +172,7 @@ function ResetPanel({ used, onRestore }: { used: boolean; onRestore: () => void 
 }
 
 export function CharacterTab() {
-  const { open, rev, mutate } = useOpenSave()
-  const player = useMemo<PlayerData | null>(() => {
-    try {
-      return open.session.player()
-    } catch {
-      return null
-    }
-  }, [open, rev])
+  const { player, mutate } = useOpenSave()
 
   if (!player) {
     return <p className="text-muted-foreground">Couldn't read player data from this save.</p>

@@ -10,7 +10,7 @@ use cp2077_save::{
     metadata::{json_string, patch_for_save},
     package::{array_elem, PackageNode, Struct, Value},
     inventory::MONEY_MAX,
-    player::{resolve_attribute, resolve_life_path, resolve_point_kind, resolve_progression, ATTRIBUTES, POINT_KINDS},
+    player::{resolve_attribute, resolve_life_path, resolve_point_kind, resolve_progression, ATTRIBUTES, POINT_KINDS, SSC},
     SaveFile,
 };
 use serde_json::{json, Value as J};
@@ -233,8 +233,9 @@ impl Session {
     }
 
     /// Player summary: level, street cred, attributes (both copies), point pools, reset status.
-    pub fn player(&self) -> R<String> {
-        let p = self.save.player_summary().map_err(err)?;
+    pub fn player(&mut self) -> R<String> {
+        self.package(SSC).map_err(err)?; // parse once, reuse until the next edit
+        let p = self.save.player_summary_with(&self.cache[SSC].package).map_err(err)?;
         let reset = self.save.get_fact(parse_fact_key("ResetAttributeDisabled").map_err(err)?).map_err(err)?;
         let attrs: Vec<J> = ATTRIBUTES
             .iter()

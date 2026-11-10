@@ -19,8 +19,16 @@
 //! Properties holding their default value are omitted entirely.
 
 use anyhow::{ensure, Context, Result};
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
+
+thread_local! {
+    /// Type names known to be enums, learned from earlier parses. Enum-ness is a property of
+    /// the game's type, so these hints are valid for any package and let later parses finish
+    /// in a single pass instead of re-parsing until the learned set is stable.
+    static ENUM_HINTS: RefCell<HashSet<String>> = RefCell::new(HashSet::new());
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
@@ -304,7 +312,7 @@ impl Package {
             descs.push((rd32(e)? as usize, base + rd32(e + 4)? as usize));
         }
 
-        let mut r = Reader { p, names: &names, enums: HashSet::new() };
+        let mut r = Reader { p, names: &names, enums: ENUM_HINTS.with(|h| h.borrow().clone()) };
         // Enum types are learned from unambiguous occurrences; re-parse until stable.
         let mut last_err = None;
         for _pass in 0..4 {
@@ -327,6 +335,7 @@ impl Package {
                 }
             }
             if last_err.is_none() && r.enums.len() == before {
+                ENUM_HINTS.with(|h| h.borrow_mut().extend(r.enums.iter().cloned()));
                 return Ok(Package { version, num_sections, num_components, ref_pool, cruids, names, chunks });
             }
             if r.enums.len() == before {
