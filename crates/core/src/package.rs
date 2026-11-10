@@ -337,8 +337,13 @@ impl Package {
     }
 
     pub fn write(&self) -> Result<Vec<u8>> {
-        let mut w = Writer { names: self.names.clone(), index: HashMap::new() };
-        for (i, n) in self.names.iter().enumerate() {
+        // Keep the original name order (so unmodified packages round-trip byte-exactly) but drop
+        // names no longer referenced, e.g. after an edit removed a field. New names are appended
+        // during serialization.
+        let used = self.used_names();
+        let names: Vec<String> = self.names.iter().filter(|n| used.contains(n.as_str())).cloned().collect();
+        let mut w = Writer { names: names.clone(), index: HashMap::new() };
+        for (i, n) in names.iter().enumerate() {
             w.index.entry(n.clone()).or_insert(i);
         }
         // serialize chunk bodies first (this may append new names)
@@ -391,6 +396,33 @@ impl Package {
             out.extend_from_slice(&b);
         }
         Ok(out)
+    }
+
+    /// Every name the serialized package will reference.
+    fn used_names(&self) -> HashSet<&str> {
+        fn walk<'a>(s: &'a Struct, out: &mut HashSet<&'a str>) {
+            for p in &s.props {
+                out.insert(&p.name);
+                out.insert(&p.ty);
+                val(&p.value, out);
+            }
+        }
+        fn val<'a>(v: &'a Value, out: &mut HashSet<&'a str>) {
+            match v {
+                Value::CName(s) | Value::Enum(s) => {
+                    out.insert(s);
+                }
+                Value::Array(a) => a.iter().for_each(|e| val(e, out)),
+                Value::Struct(s) => walk(s, out),
+                _ => {}
+            }
+        }
+        let mut out = HashSet::new();
+        for c in &self.chunks {
+            out.insert(c.ty.as_str());
+            walk(&c.data, &mut out);
+        }
+        out
     }
 
     /// Indices of all chunks of a given type.

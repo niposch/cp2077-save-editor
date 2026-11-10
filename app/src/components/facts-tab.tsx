@@ -4,6 +4,7 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { HudHeading, Panel } from "@/components/hud"
+import { VirtualList } from "@/components/virtual-list"
 import { useOpenSave } from "@/state/save-context"
 import type { FactInfo } from "@/lib/core"
 import { cn } from "@/lib/utils"
@@ -107,23 +108,26 @@ export function FactsTab() {
         {listed.length === 0 ? (
           <p className="text-sm text-muted-foreground">None.</p>
         ) : (
-          <ul className="max-h-[60vh] space-y-0.5 overflow-auto pr-1">
-            {listed.map((f) => (
-              <li key={f.name}>
-                <button
-                  type="button"
-                  onClick={() => setQuery(f.name)}
-                  className={cn(
-                    "flex w-full items-center justify-between gap-2 px-2 py-1 text-left font-mono text-xs hover:bg-accent",
-                    key === f.name && "bg-accent text-cyan",
-                  )}
-                >
-                  <span className="truncate">{f.name}</span>
-                  <span className="tabular-nums text-muted-foreground">{f.current ?? 0}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
+          <VirtualList
+            className="pr-1"
+            style={{ height: Math.min(listed.length * 26, 520) }}
+            items={listed}
+            rowHeight={26}
+            getKey={(f) => f.name}
+            render={(f) => (
+              <button
+                type="button"
+                onClick={() => setQuery(f.name)}
+                className={cn(
+                  "flex h-full w-full items-center justify-between gap-2 px-2 text-left font-mono text-xs hover:bg-accent",
+                  key === f.name && "bg-accent text-cyan",
+                )}
+              >
+                <span className="truncate">{f.name}</span>
+                <span className="tabular-nums text-muted-foreground">{f.current ?? 0}</span>
+              </button>
+            )}
+          />
         )}
       </Panel>
     </div>

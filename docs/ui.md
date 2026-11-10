@@ -44,6 +44,15 @@ Only active on the Vite dev server, so they never ship:
 * `POST /__dev/out/<file>`: writes into `work/web-out/`, to capture what the browser would download.
 * `window.__cpse`: the open save, for console checks.
 
+## Interaction details
+
+* Number fields are always real inputs with a fixed width: focusing never shifts the layout,
+  Tab moves between fields (the −/+ buttons are skipped), the value is selected on focus so typing
+  replaces it, ↑/↓ step, Enter commits, Esc reverts. Out-of-range values are clamped.
+* Long lists (objects in a system, the value tree, listed facts) are virtualized with
+  `@tanstack/react-virtual`. Everything is scrollable and only visible rows are rendered.
+  The value tree is flattened into rows from its expanded branches.
+
 ## Protecting users' saves
 
 * The start screen always shows a **"Back up your saves first"** notice with the saves folder path.
@@ -79,6 +88,6 @@ points) and cut-corner panels. It uses no game assets. Third-party pieces are al
 | shadcn/ui components, Radix UI, Tailwind CSS, React, Vite, Tauri | MIT / MIT-Apache |
 | Icons: Lucide | ISC |
 | Fonts: Inter, Rajdhani, JetBrains Mono (via Fontsource, bundled) | SIL OFL 1.1 |
-| fflate (zip) | MIT |
+| fflate (zip), @tanstack/react-virtual | MIT |
 
 The app icon/favicon is original (`app/public/favicon.svg`).

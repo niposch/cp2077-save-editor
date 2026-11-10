@@ -17,9 +17,10 @@ npm --prefix app run desktop    # desktop app
 * Quest facts: read/write. **Restoring the once-per-playthrough attribute reset works in-game.**
 * Embedded object packages (ScriptableSystemsContainer, StatsSystem, ...): generic reader +
   writer, byte-exact round trip on all test saves, path-based get/set.
-* Player edits: attributes (kept in sync with StatsSystem), attribute/perk/relic points.
-  See [docs/editing.md](docs/editing.md).
-* Not decoded yet: `inventory`/`itemData`, `PersistencySystem2`, `DataBuffer` contents, and more.
+* Player edits: attributes and attribute/perk/relic points (both verified in-game), level,
+  street cred, life path, money. See [docs/editing.md](docs/editing.md).
+* Inventory: layout decoded (all inventories, simple items); items with mods not yet.
+* Not decoded yet: item stats/mods, `PersistencySystem2`, `DataBuffer` contents, and more.
 
 ## CLI
 
@@ -56,7 +57,8 @@ Copy the result into `%USERPROFILE%\Saved Games\CD Projekt Red\Cyberpunk 2077\` 
 * [docs/save-container.md](docs/save-container.md): `sav.dat` layout, compression, node tree, version gates
 * [docs/facts.md](docs/facts.md): quest facts and `ResetAttributeDisabled`
 * [docs/package-format.md](docs/package-format.md): embedded RTTI object packages
-* [docs/player-development.md](docs/player-development.md): attributes/perks/points, and what a reset changes
+* [docs/player-development.md](docs/player-development.md): attributes/perks/points, level, street cred, life path
+* [docs/inventory.md](docs/inventory.md): inventory layout and money
 * [docs/game-binary.md](docs/game-binary.md): reverse-engineering notes (function RVAs, node API, tools in `re/`)
 
 ## Layout

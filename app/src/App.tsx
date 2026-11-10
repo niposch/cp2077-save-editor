@@ -50,6 +50,12 @@ function Editor() {
               <span className="font-heading text-3xl font-semibold text-emerald-300">{player?.streetCred ?? open.meta?.streetCred ?? "–"}</span>
               <span className="hud-label text-sm text-emerald-300/60">Street cred</span>
             </div>
+            {player?.money != null && (
+              <div className="hidden items-baseline gap-1.5 lg:flex">
+                <span className="font-heading text-lg font-semibold text-gold/80">€$</span>
+                <span className="font-heading text-3xl font-semibold text-gold tabular-nums">{player.money.toLocaleString("en-US")}</span>
+              </div>
+            )}
           </div>
           <TabsList variant="line" className="h-9 flex-1 justify-center">
             <TabsTrigger value="character" className={TAB_TRIGGER}>Character</TabsTrigger>

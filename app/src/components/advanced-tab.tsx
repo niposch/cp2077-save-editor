@@ -2,11 +2,12 @@ import { useEffect, useMemo, useState } from "react"
 import { ChevronRight, Search, TriangleAlert, CornerDownRight } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { HudHeading, Panel } from "@/components/hud"
+import { VirtualList } from "@/components/virtual-list"
 import { useOpenSave } from "@/state/save-context"
 import type { TreeValue } from "@/lib/core"
 import { cn } from "@/lib/utils"
 
-const PAGE = 100
+const ROW = 24
 
 export function AdvancedTab() {
   const { open, rev } = useOpenSave()
@@ -37,7 +38,7 @@ export function AdvancedTab() {
         </span>
       </div>
       <div className="grid gap-6 lg:grid-cols-[minmax(260px,320px)_1fr]">
-        <Panel className="flex max-h-[75vh] flex-col gap-3">
+        <Panel className="flex h-[75vh] flex-col gap-3">
           <HudHeading className="mb-0">Systems</HudHeading>
           <div className="flex flex-wrap gap-1.5">
             {nodes.map((n) => (
@@ -59,33 +60,74 @@ export function AdvancedTab() {
             <Input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter by type or #index" className="pl-9" />
           </div>
           <div className="text-xs text-muted-foreground">
-            {filtered.length} of {chunks.length} objects
+            {filtered.length.toLocaleString()} of {chunks.length.toLocaleString()} objects
           </div>
-          <ul className="-mr-2 flex-1 overflow-auto pr-2">
-            {filtered.slice(0, 500).map((c) => (
-              <li key={c.index}>
-                <button
-                  type="button"
-                  onClick={() => setSelected(c.index)}
-                  className={cn(
-                    "flex w-full items-baseline gap-2 px-2 py-0.5 text-left text-sm hover:bg-accent",
-                    selected === c.index && "bg-accent text-cyan",
-                  )}
-                >
-                  <span className="w-12 shrink-0 font-mono text-xs text-muted-foreground">#{c.index}</span>
-                  <span className="truncate">{c.type}</span>
-                </button>
-              </li>
-            ))}
-            {filtered.length > 500 && <li className="px-2 py-1 text-xs text-muted-foreground">…refine the filter to see more</li>}
-          </ul>
+          <VirtualList
+            className="-mr-2 min-h-0 flex-1 pr-2"
+            items={filtered}
+            rowHeight={26}
+            getKey={(c) => c.index}
+            render={(c) => (
+              <button
+                type="button"
+                onClick={() => setSelected(c.index)}
+                className={cn(
+                  "flex h-full w-full items-center gap-2 px-2 text-left text-sm hover:bg-accent",
+                  selected === c.index && "bg-accent text-cyan",
+                )}
+              >
+                <span className="w-12 shrink-0 font-mono text-xs text-muted-foreground">#{c.index}</span>
+                <span className="truncate">{c.type}</span>
+              </button>
+            )}
+          />
         </Panel>
-        <Panel className="min-w-0">
+        <Panel className="flex h-[75vh] min-w-0 flex-col">
           {node && selected != null ? <ChunkView node={node} index={selected} onJump={setSelected} /> : <p className="text-muted-foreground">Nothing selected.</p>}
         </Panel>
       </div>
     </div>
   )
+}
+
+/** One visible line of the value tree. */
+interface FlatRow {
+  /** Structural key (stable across edits), used for expansion state. */
+  key: string
+  depth: number
+  name: string
+  ty: string
+  v: TreeValue
+  /** Edit path for this value, or null when it can't be addressed (arrays of arrays). */
+  path: string | null
+  open: boolean
+}
+
+/** Flatten the expanded parts of a value tree into rows. */
+function flatten(props: { name: string; ty: string; v: TreeValue }[], path: string | null, key: string, depth: number, expanded: Set<string>, out: FlatRow[]) {
+  for (const p of props) push(p.name, p.ty, p.v, path && `${path}.${p.name}`, true, `${key}.${p.name}`, depth, expanded, out)
+}
+
+function push(name: string, ty: string, v: TreeValue, path: string | null, indexable: boolean, key: string, depth: number, expanded: Set<string>, out: FlatRow[]) {
+  const open = expanded.has(key)
+  out.push({ key, depth, name, ty, v, path, open })
+  if (!open) return
+  if (v.k === "struct") flatten(v.props, path, key, depth + 1, expanded, out)
+  else if (v.k === "array")
+    v.items.forEach((item, i) =>
+      // `[i]` can only follow a field name, so elements of nested arrays aren't addressable
+      push(`[${i}]`, v.ty, item, path && indexable ? `${path}[${i}]` : null, false, `${key}[${i}]`, depth + 1, expanded, out),
+    )
+}
+
+/** Top-level structs and short arrays start expanded. */
+function initialExpanded(v: TreeValue): Set<string> {
+  const s = new Set<string>()
+  if (v.k === "struct")
+    for (const p of v.props) {
+      if (p.v.k === "struct" || (p.v.k === "array" && p.v.items.length <= 20)) s.add(`.${p.name}`)
+    }
+  return s
 }
 
 function ChunkView({ node, index, onJump }: { node: string; index: number; onJump: (i: number) => void }) {
@@ -97,41 +139,51 @@ function ChunkView({ node, index, onJump }: { node: string; index: number; onJum
       return null
     }
   }, [open, node, index, rev])
+
+  // expansion survives edits, resets when another object is shown
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  useEffect(() => {
+    if (chunk) setExpanded(initialExpanded(chunk.value))
+  }, [node, index, open]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const rows = useMemo(() => {
+    const out: FlatRow[] = []
+    if (chunk?.value.k === "struct") flatten(chunk.value.props, `#${index}`, "", 0, expanded, out)
+    return out
+  }, [chunk, expanded, index])
+
   if (!chunk) return <p className="text-muted-foreground">Couldn't read object #{index}.</p>
+  const toggle = (key: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+
   return (
-    <div className="min-w-0">
+    <>
       <HudHeading right={<span className="font-mono text-xs text-muted-foreground">{node} · #{index}</span>}>{chunk.type}</HudHeading>
-      <div className="overflow-x-auto font-mono text-[13px] leading-6">
-        {chunk.value.k === "struct" && chunk.value.props.length === 0 && <p className="text-muted-foreground">No stored fields (all defaults).</p>}
-        {chunk.value.k === "struct" &&
-          chunk.value.props.map((p) => (
-            <TreeRow key={p.name} name={p.name} ty={p.ty} v={p.v} path={`#${index}.${p.name}`} indexable node={node} onJump={onJump} depth={0} />
-          ))}
-      </div>
-    </div>
+      {rows.length === 0 ? (
+        <p className="text-muted-foreground">No stored fields (all defaults).</p>
+      ) : (
+        <VirtualList
+          className="min-h-0 flex-1 font-mono text-[13px]"
+          items={rows}
+          rowHeight={ROW}
+          getKey={(r) => r.key}
+          render={(r) => <TreeRow row={r} node={node} onJump={onJump} onToggle={toggle} />}
+        />
+      )}
+    </>
   )
 }
 
-interface RowProps {
-  name: string
-  ty: string
-  v: TreeValue
-  /** Path addressing this value, or null when it can't be addressed (arrays of arrays). */
-  path: string | null
-  /** Whether `[i]` may be appended to `path` (only directly after a field name). */
-  indexable: boolean
-  node: string
-  onJump: (i: number) => void
-  depth: number
-}
-
-function TreeRow({ name, ty, v, path, indexable, node, onJump, depth }: RowProps) {
-  const [open, setOpen] = useState(depth < 1 && !(v.k === "array" && v.items.length > 20))
-  const [shown, setShown] = useState(PAGE)
-
+function TreeRow({ row, node, onJump, onToggle }: { row: FlatRow; node: string; onJump: (i: number) => void; onToggle: (key: string) => void }) {
+  const { v, depth, name, ty } = row
   if (v.k === "scalar" || v.k === "buffer") {
     return (
-      <div className="group flex items-center gap-2 hover:bg-accent/40" style={{ paddingLeft: depth * 16 + 20 }}>
+      <div className="flex h-full items-center gap-2 whitespace-nowrap hover:bg-accent/40" style={{ paddingLeft: depth * 16 + 20 }}>
         <span className="shrink-0 text-foreground/90">{name}</span>
         <span className="shrink-0 text-xs text-muted-foreground/70">{ty}</span>
         <span className="text-muted-foreground">=</span>
@@ -142,65 +194,28 @@ function TreeRow({ name, ty, v, path, indexable, node, onJump, depth }: RowProps
             <CornerDownRight className="size-3" /> #{v.text}
           </button>
         ) : (
-          <ScalarEditor node={node} path={path} kind={v.kind} text={v.text} />
+          <ScalarEditor node={node} path={row.path} kind={v.kind} text={v.text} />
         )}
       </div>
     )
   }
-
   const count = v.k === "struct" ? v.props.length : v.items.length
   // a short label for array entries, e.g. "[5] · CoolSkill"
-  const hint =
-    v.k === "struct"
-      ? v.props.find((p) => p.v.k === "scalar" && (p.v.kind === "enum" || p.v.kind === "cname" || p.v.kind === "str"))
-      : undefined
+  const hint = v.k === "struct" ? v.props.find((p) => p.v.k === "scalar" && (p.v.kind === "enum" || p.v.kind === "cname" || p.v.kind === "str")) : undefined
   return (
-    <div>
-      <button
-        type="button"
-        onClick={() => setOpen(!open)}
-        className="flex w-full items-center gap-1.5 text-left hover:bg-accent/40"
-        style={{ paddingLeft: depth * 16 }}
-      >
-        <ChevronRight className={cn("size-3.5 shrink-0 text-muted-foreground transition-transform", open && "rotate-90")} />
-        <span className="text-foreground/90">{name}</span>
-        <span className="text-xs text-muted-foreground/70">{ty}</span>
-        <span className="text-xs text-salmon/80">{v.k === "array" ? `[${count}]` : `{${count}}`}</span>
-        {hint && hint.v.k === "scalar" && <span className="truncate text-xs text-gold/80">· {hint.v.text}</span>}
-      </button>
-      {open &&
-        (v.k === "struct"
-          ? v.props.map((p) => (
-              <TreeRow key={p.name} name={p.name} ty={p.ty} v={p.v} path={path && `${path}.${p.name}`} indexable node={node} onJump={onJump} depth={depth + 1} />
-            ))
-          : (
-            <>
-              {v.items.slice(0, shown).map((item, i) => (
-                <TreeRow
-                  key={i}
-                  name={`[${i}]`}
-                  ty={v.ty}
-                  v={item}
-                  path={path && indexable ? `${path}[${i}]` : null}
-                  indexable={false}
-                  node={node}
-                  onJump={onJump}
-                  depth={depth + 1}
-                />
-              ))}
-              {v.items.length > shown && (
-                <button
-                  type="button"
-                  onClick={() => setShown(shown + PAGE)}
-                  className="text-xs text-cyan-dim hover:text-cyan"
-                  style={{ paddingLeft: (depth + 1) * 16 + 20 }}
-                >
-                  show {Math.min(PAGE, v.items.length - shown)} more of {v.items.length - shown} remaining
-                </button>
-              )}
-            </>
-          ))}
-    </div>
+    <button
+      type="button"
+      onClick={() => onToggle(row.key)}
+      className="flex h-full w-full items-center gap-1.5 whitespace-nowrap text-left hover:bg-accent/40"
+      style={{ paddingLeft: depth * 16 }}
+      aria-expanded={row.open}
+    >
+      <ChevronRight className={cn("size-3.5 shrink-0 text-muted-foreground transition-transform", row.open && "rotate-90")} />
+      <span className="text-foreground/90">{name}</span>
+      <span className="text-xs text-muted-foreground/70">{ty}</span>
+      <span className="text-xs text-salmon/80">{v.k === "array" ? `[${count.toLocaleString()}]` : `{${count}}`}</span>
+      {hint && hint.v.k === "scalar" && <span className="truncate text-xs text-gold/80">· {hint.v.text}</span>}
+    </button>
   )
 }
 
@@ -233,6 +248,7 @@ function ScalarEditor({ node, path, kind, text }: { node: string; path: string |
     <input
       value={draft}
       onChange={(e) => setDraft(e.target.value)}
+      onFocus={(e) => e.currentTarget.select()}
       onBlur={commit}
       onKeyDown={(e) => {
         if (e.key === "Enter") (e.target as HTMLInputElement).blur()
@@ -240,7 +256,11 @@ function ScalarEditor({ node, path, kind, text }: { node: string; path: string |
       }}
       spellCheck={false}
       size={Math.max(4, Math.min(48, draft.length + 1))}
-      className={cn("min-w-0 border border-transparent bg-transparent px-1 outline-none hover:border-border focus:border-cyan-dim", color, draft !== text && "border-gold/60")}
+      className={cn(
+        "h-5 min-w-0 bg-transparent px-1 outline-none hover:shadow-[0_0_0_1px_var(--color-border)] focus:shadow-[0_0_0_1px_var(--color-cyan-dim)]",
+        color,
+        draft !== text && "shadow-[0_0_0_1px_color-mix(in_oklab,var(--color-gold)_60%,transparent)]",
+      )}
       title={path}
     />
   )

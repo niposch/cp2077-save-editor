@@ -7,9 +7,10 @@
 use cp2077_save::{
     edit::{scalar_str, SetResult},
     facts::parse_fact_key,
-    metadata::patch_for_save,
+    metadata::{json_string, patch_for_save},
     package::{array_elem, PackageNode, Struct, Value},
-    player::{resolve_attribute, resolve_point_kind, ATTRIBUTES, POINT_KINDS},
+    inventory::MONEY_MAX,
+    player::{resolve_attribute, resolve_life_path, resolve_point_kind, resolve_progression, ATTRIBUTES, POINT_KINDS},
     SaveFile,
 };
 use serde_json::{json, Value as J};
@@ -149,6 +150,9 @@ impl Session {
             "attributes": attrs,
             "points": points,
             "resetUsed": reset.is_some_and(|r| r.1 != 0),
+            "lifePath": p.life_path,
+            "money": self.save.money().ok().flatten(),
+            "moneyMax": MONEY_MAX,
         })
         .to_string())
     }
@@ -160,6 +164,32 @@ impl Session {
         self.set_meta(meta_key, format!("{value}.0"));
         self.edited(stat, r.old.map_or("default".into(), |o| o.to_string()), value.to_string());
         Ok(r.warning.unwrap_or_default())
+    }
+
+    /// Set level ("level", 1..=60) or street cred ("streetcred", 1..=50). Returns a warning or "".
+    pub fn set_progression(&mut self, key: &str, value: i32) -> R<String> {
+        let (ty, _, meta_key) = resolve_progression(key).map_err(err)?;
+        let r = self.save.set_progression(ty, value).map_err(err)?;
+        self.set_meta(meta_key, format!("{value}.0"));
+        let label = if ty == "Level" { "Level" } else { "Street cred" };
+        self.edited(label, r.old.map_or("default".into(), |o| o.to_string()), value.to_string());
+        Ok(r.warning.unwrap_or_default())
+    }
+
+    /// Set the life path (corpo/nomad/streetkid).
+    pub fn set_life_path(&mut self, name: &str) -> R<()> {
+        let lp = resolve_life_path(name).map_err(err)?;
+        let old = self.save.set_life_path(lp).map_err(err)?;
+        self.set_meta("lifePath", json_string(lp));
+        self.edited("Life path", old, lp);
+        Ok(())
+    }
+
+    /// Set V's money.
+    pub fn set_money(&mut self, value: u32) -> R<()> {
+        let old = self.save.set_money(value).map_err(err)?;
+        self.edited("Money", old.to_string(), value.to_string());
+        Ok(())
     }
 
     /// Set unspent points (attribute/perk/relic).

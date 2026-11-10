@@ -7,6 +7,9 @@ All edits go through one command that reads a save folder and writes a **new** f
 cp2077-save edit <in_dir> <out_dir> [ops...]
   --attr <body|reflexes|tech|intelligence|cool>=<3..20>
   --points <attribute|perk|relic>=<n>      unspent points
+  --level <1..60>   --street-cred <1..50>
+  --life-path <corpo|nomad|streetkid>
+  --money <eddies>
   --unlock-reset                           allow "Reset Attributes" again
   --fact <name|0xHASH>=<n>
   --remove-fact <name|0xHASH>
@@ -27,8 +30,12 @@ under a new name (e.g. `ManualSave-99`) and load it. Keep a backup.
 
 | op | where | in-game test |
 |---|---|---|
-| `--attr` | `PlayerDevelopmentData.attributes[attributeName=X].value` **and** the attribute's `gameConstantStatModifier` in StatsSystem's `sharedDataBuffer`; also `metadata.9.json` | pending |
-| `--points` | `PlayerDevelopmentData.devPoints[type=T].unspent` (attribute = entry without `type`, perk = `Primary`, relic = `Espionage`) | pending |
+| `--attr` | `PlayerDevelopmentData.attributes[attributeName=X].value` **and** the attribute's `gameConstantStatModifier` in StatsSystem's `sharedDataBuffer`; also `metadata.9.json` | ✅ works |
+| `--points` | `PlayerDevelopmentData.devPoints[type=T].unspent` (attribute = entry without `type`, perk = `Primary`, relic = `Espionage`) | ✅ works |
+| `--level` | `proficiencies[type=Level].currentLevel` (+ `currentExp` → 0), the `Level` stat modifier in StatsSystem, `LevelAssignmentSystem_Ver1` (float), metadata `level` | pending |
+| `--street-cred` | `proficiencies[type=StreetCred].currentLevel` (+ `currentExp` → 0), the `StreetCred` stat modifier, metadata `streetCred` | pending |
+| `--life-path` | `PlayerDevelopmentData.lifePath` (absent = Corporate) and the facts `q000_corpo/nomad/street_kid_background`; metadata `lifePath` | pending |
+| `--money` | quantity of V's `Items.money` item ([inventory.md](inventory.md)) | pending |
 | `--unlock-reset` | removes fact `ResetAttributeDisabled` | ✅ works |
 | `--fact` / `--remove-fact` | FactsTable | (unlock-reset uses it) |
 | `--set` | anything in an object package | n/a |
@@ -41,6 +48,9 @@ Safety checks:
   identical to the edited tree.
 * `PlayerDevelopmentData` is selected by `ownerID.hash=1` (V). Older saves contain several
   copies for NPCs.
+
+Changing the level doesn't grant the points a real level-up would; set them with `--points`.
+Difficulty isn't stored in the save. It's an in-game setting, so it's not part of the editor.
 
 Changing an attribute doesn't touch `devPoints.spent` for attributes. The game doesn't seem to
 validate totals on load: there's no such script function, only `EspionageAttributeRetrofix`.

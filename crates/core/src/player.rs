@@ -83,6 +83,53 @@ pub struct PlayerSummary {
     pub street_cred: Option<i64>,
     pub attributes: Vec<(String, Option<i64>, Option<f32>)>,
     pub points: Vec<(String, Option<i64>, Option<i64>)>,
+    pub life_path: Option<String>,
+}
+
+/// (accepted names, proficiency type / stat name, max value, metadata.9.json key)
+pub const PROGRESSION: &[(&[&str], &str, i32, &str)] = &[
+    (&["level", "lvl"], "Level", 60, "level"),
+    (&["streetcred", "street-cred", "street_cred", "sc"], "StreetCred", 50, "streetCred"),
+];
+
+pub fn resolve_progression(name: &str) -> Result<(&'static str, i32, &'static str)> {
+    let n = name.to_ascii_lowercase();
+    PROGRESSION
+        .iter()
+        .find(|(names, ..)| names.contains(&n.as_str()))
+        .map(|(_, ty, max, meta)| (*ty, *max, *meta))
+        .with_context(|| format!("unknown progression {name:?} (level, streetcred)"))
+}
+
+/// Life paths: (gamedataLifePath value, quest fact set by the prologue).
+/// `Corporate` is the enum's default, so a Corpo save simply has no `lifePath` field.
+pub const LIFE_PATHS: &[(&str, &str)] = &[
+    ("Corporate", "q000_corpo_background"),
+    ("Nomad", "q000_nomad_background"),
+    ("StreetKid", "q000_street_kid_background"),
+];
+
+pub fn resolve_life_path(name: &str) -> Result<&'static str> {
+    let n = name.to_ascii_lowercase().replace(['-', '_', ' '], "");
+    Ok(match n.as_str() {
+        "corporate" | "corpo" => "Corporate",
+        "nomad" => "Nomad",
+        "streetkid" | "street" => "StreetKid",
+        _ => bail!("unknown life path {name:?} (corpo, nomad, streetkid)"),
+    })
+}
+
+fn life_path_of(pkg: &Package) -> String {
+    match pkg.get_path(&format!("{PDD}.lifePath")) {
+        Ok(Some(Value::Enum(v))) => v.clone(),
+        _ => "Corporate".to_string(),
+    }
+}
+
+#[derive(Debug)]
+pub struct ProgressionEdit {
+    pub old: Option<i64>,
+    pub warning: Option<String>,
 }
 
 impl SaveFile {
@@ -104,8 +151,9 @@ impl SaveFile {
         Ok(r)
     }
 
-    /// Locate the attribute's constant stat modifier in StatsSystem: (offset of f32 within node, value).
-    fn attribute_modifier(&self, stat: &str) -> Result<(usize, f32)> {
+    /// Locate the player's constant stat modifier for `stat` in StatsSystem:
+    /// (offset of the f32 value within the node, value).
+    fn stat_modifier(&self, stat: &str) -> Result<(usize, f32)> {
         let i = self.find_node("StatsSystem").context("no StatsSystem node")?;
         let b = self.node_bytes(i);
         let mut pat = CONST_MOD_TAG.to_vec();
@@ -113,7 +161,7 @@ impl SaveFile {
         let hits: Vec<usize> = b.windows(pat.len()).enumerate().filter(|(_, w)| *w == pat.as_slice()).map(|(i, _)| i).collect();
         ensure!(
             hits.len() == 1,
-            "expected exactly one {stat} stat modifier in StatsSystem, found {} (attribute edits are only supported for 2.x saves)",
+            "expected exactly one {stat} stat modifier in StatsSystem, found {} (only supported for 2.x saves)",
             hits.len()
         );
         let off = hits[0] + pat.len() + 4; // skip u32 modifier type
@@ -127,11 +175,12 @@ impl SaveFile {
         let mut s = PlayerSummary {
             level: int_of(get("proficiencies[type=Level].currentLevel")),
             street_cred: int_of(get("proficiencies[type=StreetCred].currentLevel")),
+            life_path: Some(life_path_of(&pkg)),
             ..Default::default()
         };
         for (_, stat, _) in ATTRIBUTES {
             let v = int_of(get(&format!("attributes[attributeName={stat}].value")));
-            let m = self.attribute_modifier(stat).ok().map(|x| x.1);
+            let m = self.stat_modifier(stat).ok().map(|x| x.1);
             s.attributes.push((stat.to_string(), v, m));
         }
         for (_, ty, desc) in POINT_KINDS {
@@ -147,7 +196,7 @@ impl SaveFile {
     /// Set an attribute in PlayerDevelopmentData and the matching StatsSystem modifier.
     pub fn set_attribute(&mut self, stat: &str, value: i32) -> Result<AttributeEdit> {
         ensure!((3..=20).contains(&value), "attribute values must be 3..=20 (the game's own range)");
-        let (off, modval) = self.attribute_modifier(stat)?;
+        let (off, modval) = self.stat_modifier(stat)?;
         let old = self.edit_package(SSC, |p| {
             let path = format!("{PDD}.attributes[attributeName={stat}].value");
             Ok(match p.set_path(&path, &value.to_string())? {
@@ -161,6 +210,71 @@ impl SaveFile {
         let i = self.find_node("StatsSystem").unwrap();
         self.node_bytes_mut(i)[off..off + 4].copy_from_slice(&(value as f32).to_le_bytes());
         Ok(AttributeEdit { old, warning })
+    }
+
+    /// Set character level ("Level", 1..=60) or street cred ("StreetCred", 1..=50).
+    ///
+    /// Updates every copy found in 2.5 saves: the proficiency in PlayerDevelopmentData
+    /// (XP within the level is reset to 0), the player's constant stat modifier in StatsSystem,
+    /// and for the level also `LevelAssignmentSystem_Ver1` (a float used for level scaling).
+    pub fn set_progression(&mut self, ty: &str, value: i32) -> Result<ProgressionEdit> {
+        let max = PROGRESSION.iter().find(|p| p.1 == ty).map(|p| p.2).context("unknown progression")?;
+        ensure!((1..=max).contains(&value), "{ty} must be 1..={max} (the game's own range)");
+        let (off, modval) = self.stat_modifier(ty)?;
+        let las = if ty == "Level" { Some(self.level_assignment()?) } else { None };
+        let old = self.edit_package(SSC, |p| {
+            let base = format!("{PDD}.proficiencies[type={ty}]");
+            let old = match p.set_path(&format!("{base}.currentLevel"), &value.to_string())? {
+                SetResult::Changed { old } => int_of(Some(&old)),
+                SetResult::Inserted => None,
+            };
+            // XP is tracked within the current level; keep it from overflowing the new level.
+            if p.get_path(&format!("{base}.currentExp"))?.is_some() {
+                p.set_path(&format!("{base}.currentExp"), "0")?;
+            }
+            Ok(old)
+        })?;
+        let warning = old.filter(|o| (*o as f32 - modval).abs() > 0.01).map(|o| {
+            format!("{ty} was {o} in PlayerDevelopmentData but {modval} in StatsSystem; both now {value}")
+        });
+        let si = self.find_node("StatsSystem").unwrap();
+        self.node_bytes_mut(si)[off..off + 4].copy_from_slice(&(value as f32).to_le_bytes());
+        if let Some((ni, _)) = las {
+            self.node_bytes_mut(ni)[4..8].copy_from_slice(&(value as f32).to_le_bytes());
+        }
+        Ok(ProgressionEdit { old, warning })
+    }
+
+    /// `LevelAssignmentSystem_Ver1`: `u32 nodeId, f32 playerLevel, u8`. Returns (node index, level).
+    fn level_assignment(&self) -> Result<(usize, f32)> {
+        let i = self.find_node("LevelAssignmentSystem_Ver1").context("no LevelAssignmentSystem_Ver1 node")?;
+        let b = self.node_bytes(i);
+        ensure!(b.len() == 9, "unexpected LevelAssignmentSystem_Ver1 size {}", b.len());
+        Ok((i, f32::from_le_bytes(b[4..8].try_into()?)))
+    }
+
+    pub fn life_path(&self) -> Result<String> {
+        Ok(life_path_of(&self.package(SSC)?.package))
+    }
+
+    /// Change the life path: `PlayerDevelopmentData.lifePath` plus the prologue's background fact.
+    /// Returns the previous life path.
+    pub fn set_life_path(&mut self, life_path: &str) -> Result<String> {
+        let (lp, fact) = LIFE_PATHS.iter().find(|l| l.0 == life_path).copied().context("unknown life path")?;
+        let old = self.life_path()?;
+        self.edit_package(SSC, |p| {
+            if lp == "Corporate" {
+                p.remove_path(&format!("{PDD}.lifePath"))?;
+            } else {
+                p.set_path(&format!("{PDD}.lifePath:gamedataLifePath"), lp)?;
+            }
+            Ok(())
+        })?;
+        for (_, f) in LIFE_PATHS {
+            self.remove_fact(crate::facts::fnv1a32(f))?;
+        }
+        self.set_fact(crate::facts::fnv1a32(fact), 1)?;
+        Ok(old)
     }
 
     /// Set unspent points of a kind ("" = attribute points). Returns the previous value.

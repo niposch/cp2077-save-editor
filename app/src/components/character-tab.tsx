@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { HudHeading, Panel, Stepper } from "@/components/hud"
 import { useOpenSave } from "@/state/save-context"
-import type { AttributeKey, PlayerData, PointKey } from "@/lib/core"
+import type { AttributeKey, LifePath, PlayerData, PointKey, ProgressionKey } from "@/lib/core"
 import { cn } from "@/lib/utils"
 
 const ATTR_LABEL: Record<AttributeKey, string> = {
@@ -51,6 +51,102 @@ function AttributeTile({ a, onSet }: { a: PlayerData["attributes"][number]; onSe
         )}
       </div>
       <Stepper label={ATTR_LABEL[a.key]} value={value} min={3} max={20} onCommit={onSet} valueClassName="text-4xl text-cyan" />
+    </Panel>
+  )
+}
+
+const LIFE_PATHS: { value: LifePath; label: string }[] = [
+  { value: "StreetKid", label: "Street Kid" },
+  { value: "Nomad", label: "Nomad" },
+  { value: "Corporate", label: "Corpo" },
+]
+
+function ProgressionPanel({ player }: { player: PlayerData }) {
+  const { mutate } = useOpenSave()
+  const setProg = (key: ProgressionKey, label: string, v: number) => {
+    const warn = mutate(`Couldn't set ${label}`, (s) => s.setProgression(key, v))
+    if (warn) toast.warning(warn)
+  }
+  const row = "flex flex-wrap items-center justify-between gap-x-2 gap-y-1"
+  return (
+    <Panel>
+      <HudHeading>Progression</HudHeading>
+      <div className="space-y-4">
+        <div className={row}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="hud-label text-sm text-cyan">Level</span>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-64">
+              1–60. XP towards the next level resets to 0. Changing the level here doesn't grant the attribute and perk points a
+              level-up would; adjust those below.
+            </TooltipContent>
+          </Tooltip>
+          <Stepper label="Level" value={player.level ?? 1} min={1} max={60} onCommit={(v) => setProg("level", "level", v)} valueClassName="text-2xl text-cyan" />
+        </div>
+        <div className={row}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="hud-label text-sm text-emerald-300">Street cred</span>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-64">1–50. Street cred XP towards the next level resets to 0.</TooltipContent>
+          </Tooltip>
+          <Stepper
+            label="Street cred"
+            value={player.streetCred ?? 1}
+            min={1}
+            max={50}
+            onCommit={(v) => setProg("streetcred", "street cred", v)}
+            valueClassName="text-2xl text-emerald-300"
+          />
+        </div>
+        <div className={row}>
+          <span className="hud-label text-sm text-gold">Money €$</span>
+          {player.money == null ? (
+            <span className="text-xs text-muted-foreground">No money item in V's inventory</span>
+          ) : (
+            <Stepper
+              label="Money"
+              value={player.money}
+              min={0}
+              max={player.moneyMax}
+              onCommit={(v) => mutate("Couldn't set money", (s) => s.setMoney(v))}
+              className="ml-auto"
+              valueClassName="text-2xl text-gold"
+            />
+          )}
+        </div>
+      </div>
+    </Panel>
+  )
+}
+
+function LifePathPanel({ value }: { value: LifePath | null }) {
+  const { mutate } = useOpenSave()
+  return (
+    <Panel>
+      <HudHeading className="mb-2">Life path</HudHeading>
+      <div className="grid grid-cols-3 gap-1.5" role="radiogroup" aria-label="Life path">
+        {LIFE_PATHS.map((lp) => (
+          <button
+            key={lp.value}
+            type="button"
+            role="radio"
+            aria-checked={value === lp.value}
+            onClick={() => value !== lp.value && mutate("Couldn't change the life path", (s) => s.setLifePath(lp.value))}
+            className={cn(
+              "hud-label cut cut-sm border px-1 py-1.5 text-xs whitespace-nowrap transition-colors",
+              value === lp.value ? "border-cyan-dim bg-cyan/10 text-cyan" : "border-border text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {lp.label}
+          </button>
+        ))}
+      </div>
+      <p className="mt-2 text-xs text-muted-foreground">
+        Changes background-specific dialogue options from here on. The prologue isn't replayed, and quests already finished keep their
+        outcome.
+      </p>
     </Panel>
   )
 }
@@ -126,6 +222,7 @@ export function CharacterTab() {
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(240px,280px)_1fr] xl:grid-cols-[minmax(240px,280px)_1fr_minmax(260px,300px)]">
       <div className="space-y-6">
+        <ProgressionPanel player={player} />
         <Panel>
           <HudHeading>Points</HudHeading>
           <div className="space-y-4">
@@ -173,6 +270,7 @@ export function CharacterTab() {
       </div>
 
       <div className="grid gap-6 sm:grid-cols-2 lg:col-span-2 xl:col-span-1 xl:grid-cols-1 xl:content-start">
+        <LifePathPanel value={player.lifePath} />
         <ChangesPanel />
         <SaveInfoPanel />
       </div>
@@ -186,7 +284,6 @@ function SaveInfoPanel() {
   const m = open.meta
   const rows: [string, string | number | undefined][] = [
     ["Patch", m?.buildPatch],
-    ["Life path", m?.lifePath],
     ["Difficulty", m?.difficulty],
     ["Save version", info.saveVersion],
     ["Game version", info.gameVersion],

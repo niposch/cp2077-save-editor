@@ -57,3 +57,29 @@ Attribute TweakDBIDs are `crc32("BaseStats.<Stat>") | len << 32`, e.g. `BaseStat
 ## Which PlayerDevelopmentData is V's
 
 2.5 saves have one; older saves have several (NPCs). V's has `ownerID.hash == 1`.
+
+## Level and street cred
+
+Both are `proficiencies` entries (`type = Level` / `StreetCred`, `currentLevel`, `currentExp` =
+XP within the current level). Like attributes, they have more copies:
+
+| copy | level | street cred |
+|---|---|---|
+| `proficiencies[type=…].currentLevel` | ✓ | ✓ |
+| StatsSystem `gameConstantStatModifier` (`fnv1a64("Level")` / `("StreetCred")`) | 48.0 | 50.0 |
+| `LevelAssignmentSystem_Ver1` node: `u32 id, f32 level, u8` | 48.0 | – |
+| `metadata.9.json` `level` / `streetCred` | ✓ | ✓ |
+
+Found by decoding the stat modifier buffer: the player's block lists every skill level, then
+`StreetCred`, the five attributes, then `Level`. Stat names were resolved by FNV-1a 64 hashing
+every identifier in `final.redscripts`. `LevelAssignmentSystem_Ver1` was found by comparing a
+level-48 and a level-32 save. The skill levels (Headhunter etc.) sit in the same block, so they
+could be edited the same way, but their milestone rewards are granted on level-up and wouldn't follow.
+
+## Life path
+
+`PlayerDevelopmentData.lifePath: gamedataLifePath`. `Corporate` is the enum's first value, so Corpo
+saves omit the field (the 1.6 Street Kid save has `lifePath = StreetKid`). The prologue also sets
+one of the facts `q000_corpo_background` / `q000_street_kid_background` (seen in saves) /
+`q000_nomad_background` (same naming, not yet seen in a save). The editor switches both.
+Corpo → Nomad → Corpo restores the original save data byte-for-byte.

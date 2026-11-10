@@ -262,6 +262,29 @@ pub enum SetResult {
 }
 
 impl Package {
+    /// Remove a struct field, making it fall back to its default value.
+    /// Returns the removed value (None if it was already absent).
+    pub fn remove_path(&mut self, path: &str) -> Result<Option<Value>> {
+        let segs = parse_path(path)?;
+        ensure!(segs.len() >= 2, "path must name a field inside a chunk");
+        let last = segs.last().unwrap().clone();
+        ensure!(last.sel.is_none(), "can only remove whole fields, not array elements");
+        let ci = select_chunk(self, &segs[0])?;
+        let mut cur: &mut Struct = &mut self.chunks[ci].data;
+        for seg in &segs[1..segs.len() - 1] {
+            let p = cur.props.iter_mut().find(|p| p.name == seg.name).with_context(|| format!("field {} absent", seg.name))?;
+            let mut v = &mut p.value;
+            if let Some(sel) = &seg.sel {
+                let Value::Array(a) = v else { bail!("{} is not an array", seg.name) };
+                let i = select_index(a, sel)?;
+                v = &mut a[i];
+            }
+            let Value::Struct(s) = v else { bail!("{} is not a struct", seg.name) };
+            cur = s;
+        }
+        Ok(cur.props.iter().position(|p| p.name == last.name).map(|i| cur.props.remove(i).value))
+    }
+
     /// Read the value at `path` (None if the field is absent, i.e. default).
     pub fn get_path(&self, path: &str) -> Result<Option<&Value>> {
         let segs = parse_path(path)?;
@@ -349,7 +372,8 @@ impl Package {
             (Some(t), tpl) => {
                 let sample = match &tpl {
                     Some((tt, s, _)) if tt == t => s.clone(),
-                    _ => sample_for_type(t).with_context(|| format!("don't know how to build a {t}"))?,
+                    // Not a primitive and nothing to copy from: a scalar of a named type is an enum.
+                    _ => sample_for_type(t).unwrap_or(Value::Enum(String::new())),
                 };
                 (t.clone(), sample, tpl.map(|t| t.2).unwrap_or_default())
             }

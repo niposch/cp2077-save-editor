@@ -27,7 +27,14 @@ export interface PlayerData {
   attributes: { key: AttributeKey; stat: string; value: number | null; modifier: number | null }[]
   points: { key: PointKey; label: string; spent: number | null; unspent: number | null }[]
   resetUsed: boolean
+  lifePath: LifePath | null
+  /** null when V has no money item at all */
+  money: number | null
+  moneyMax: number
 }
+
+export type LifePath = "Corporate" | "Nomad" | "StreetKid"
+export type ProgressionKey = "level" | "streetcred"
 
 export interface FactInfo {
   hash: string
@@ -69,6 +76,16 @@ export class SaveSession {
   }
   setPoints(key: PointKey, value: number) {
     this.s.set_points(key, value)
+  }
+  /** Returns a warning message, or "" */
+  setProgression(key: ProgressionKey, value: number): string {
+    return this.s.set_progression(key, value)
+  }
+  setLifePath(lp: LifePath) {
+    this.s.set_life_path(lp)
+  }
+  setMoney(value: number) {
+    this.s.set_money(value)
   }
   unlockReset(): boolean {
     return this.s.unlock_reset()

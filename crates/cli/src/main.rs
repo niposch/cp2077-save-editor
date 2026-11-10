@@ -3,7 +3,8 @@ use cp2077_save::{
     edit::{scalar_str, SetResult},
     facts::parse_fact_key,
     package::{dump_package, dump_value, PackageNode},
-    player::{resolve_attribute, resolve_point_kind},
+    metadata::json_string,
+    player::{resolve_attribute, resolve_life_path, resolve_point_kind, resolve_progression},
     SaveFile,
 };
 mod savedir;
@@ -31,6 +32,9 @@ edit (writes a NEW save folder, never touches the input):
   edit <in_dir> <out_dir> [ops...]
     --attr <body|reflexes|tech|intelligence|cool>=<3..20>
     --points <attribute|perk|relic>=<n>    unspent points
+    --level <1..60>   --street-cred <1..50>
+    --life-path <corpo|nomad|streetkid>
+    --money <eddies>
     --unlock-reset                         allow \"Reset Attributes\" again
     --fact <name|0xHASH>=<n>   --remove-fact <name|0xHASH>
     --set <Node>:<path>=<value>            generic package edit
@@ -111,6 +115,8 @@ fn main() -> Result<()> {
             for (n, sp, un) in &p.points {
                 println!("  {n:26} {:>4} / {}", o(*sp), o(*un));
             }
+            println!("life path: {}", p.life_path.as_deref().unwrap_or("-"));
+            println!("money: {}", s.money()?.map_or("- (no money item)".to_string(), |m| m.to_string()));
             let reset = s.get_fact(parse_fact_key("ResetAttributeDisabled")?)?;
             println!("attribute reset: {}", if reset.map_or(false, |r| r.1 != 0) { "USED" } else { "available" });
         }
@@ -179,6 +185,27 @@ fn edit(src: &Path, dst: &Path, ops: &[&str]) -> Result<()> {
                 let v: i32 = v.parse().with_context(|| format!("bad number {v:?}"))?;
                 let old = s.set_unspent_points(ty, v)?;
                 println!("{k} points (unspent): {} -> {v}", old.map_or("0".into(), |o| o.to_string()));
+            }
+            "--level" | "--street-cred" => {
+                let (ty, _, meta_key) = resolve_progression(op.trim_start_matches('-'))?;
+                let v: i32 = arg()?.parse().context("bad number")?;
+                let r = s.set_progression(ty, v)?;
+                if let Some(w) = &r.warning {
+                    eprintln!("warning: {w}");
+                }
+                println!("{ty}: {} -> {v}", r.old.map_or("default".into(), |o| o.to_string()));
+                meta.push((meta_key.to_string(), format!("{v}.0")));
+            }
+            "--life-path" => {
+                let lp = resolve_life_path(arg()?)?;
+                let old = s.set_life_path(lp)?;
+                println!("life path: {old} -> {lp}");
+                meta.push(("lifePath".to_string(), json_string(lp)));
+            }
+            "--money" => {
+                let v: u32 = arg()?.parse().context("bad amount")?;
+                let old = s.set_money(v)?;
+                println!("money: {old} -> {v}");
             }
             "--unlock-reset" => {
                 let h = parse_fact_key("ResetAttributeDisabled")?;
