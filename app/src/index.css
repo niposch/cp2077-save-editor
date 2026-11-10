@@ -132,7 +132,20 @@
     position: relative;
     border: 1px solid var(--edge);
     background: linear-gradient(180deg, oklch(0.2 0.04 16 / 0.92), oklch(0.16 0.03 14 / 0.92));
-    clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
+    /*
+     * Only the two corners are clipped: the straight sides of the polygon sit 2px *outside* the
+     * box, so the (pixel-snapped) border is never shaved by the (unsnapped) clip edge when the
+     * panel lands on a fractional position. The diagonals are the same lines as before
+     * (x + y = cut, and x + y = W + H − cut), just extended past the box.
+     */
+    clip-path: polygon(
+      calc(var(--cut) + 2px) -2px,
+      calc(100% + 2px) -2px,
+      calc(100% + 2px) calc(100% - var(--cut) - 2px),
+      calc(100% - var(--cut) - 2px) calc(100% + 2px),
+      -2px calc(100% + 2px),
+      -2px calc(var(--cut) + 2px)
+    );
   }
   .hud-panel::before,
   .hud-panel::after {

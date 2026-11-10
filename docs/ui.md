@@ -65,7 +65,9 @@ copies it into `dist/examples` for web builds. Desktop builds (run by the Tauri 
   instead of two or more), the stats buffer is indexed in one scan, and the player summary is
   computed once per edit and shared.
 * Panels draw their straight edges with a real CSS border (pixel-snapped, so it never disappears at
-  fractional sizes) and only the two cut corners as 1px diagonal lines.
+  fractional sizes) and only the two cut corners as 1px diagonal lines. Their clip-path only cuts
+  those corners: its straight sides sit 2px outside the box, so it can't shave the border when a
+  panel lands on a fractional position (grid columns like x = 400.5).
 * Number fields are always real inputs with a fixed width: focusing never shifts the layout,
   Tab moves between fields (the −/+ buttons are skipped), the value is selected on focus so typing
   replaces it, ↑/↓ step, Enter commits, Esc reverts. Out-of-range values are clamped.
