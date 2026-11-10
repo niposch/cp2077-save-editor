@@ -1,0 +1,10 @@
+[package]
+name = "cp2077-save"
+description = "Cyberpunk 2077 save format: container, facts, object packages, player edits (no I/O)"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+crc32fast.workspace = true
+lz4_flex.workspace = true

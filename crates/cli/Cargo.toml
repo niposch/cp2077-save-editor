@@ -1,0 +1,12 @@
+[package]
+name = "cp2077-save-cli"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "cp2077-save"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+cp2077-save.workspace = true

@@ -17,7 +17,7 @@ pub mod facts;
 pub mod package;
 pub mod edit;
 pub mod player;
-pub mod savedir;
+pub mod metadata;
 
 pub const CHUNK_SIZE: usize = 0x40000;
 

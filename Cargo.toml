@@ -1,9 +1,19 @@
-[package]
-name = "cp2077-save"
+[workspace]
+resolver = "3"
+members = ["crates/core", "crates/cli", "crates/wasm", "app/src-tauri"]
+
+[workspace.package]
 version = "0.1.0"
 edition = "2024"
 
-[dependencies]
+[workspace.dependencies]
 anyhow = "1.0.104"
 crc32fast = "1.5.5"
 lz4_flex = "0.14.0"
+cp2077-save = { path = "crates/core" }
+
+[profile.release]
+opt-level = 3
+
+[profile.release.package.cp2077-save-wasm]
+opt-level = 3

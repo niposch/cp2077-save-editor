@@ -1,0 +1,144 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/jetbrains-mono";
+@import "@fontsource/rajdhani/500.css";
+@import "@fontsource/rajdhani/600.css";
+@import "@fontsource/rajdhani/700.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Palette loosely follows the game's menus: near-black with a red cast, salmon-red
+ * labels/borders, cyan for values and the active state, yellow for points/currency.
+ */
+@theme inline {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-heading: "Rajdhani", var(--font-sans);
+  --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
+
+  --color-cyan: var(--cyan);
+  --color-cyan-dim: var(--cyan-dim);
+  --color-gold: var(--gold);
+  --color-salmon: var(--salmon);
+  --color-salmon-dim: var(--salmon-dim);
+  --color-panel: var(--panel);
+
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root,
+.dark {
+  --cyan: oklch(0.88 0.13 195);
+  --cyan-dim: oklch(0.62 0.1 200);
+  --gold: oklch(0.89 0.16 98);
+  --salmon: oklch(0.7 0.17 27);
+  --salmon-dim: oklch(0.42 0.11 25);
+  --panel: oklch(0.19 0.035 15);
+
+  --background: oklch(0.135 0.022 12);
+  --foreground: oklch(0.93 0.012 40);
+  --card: oklch(0.17 0.03 14);
+  --card-foreground: oklch(0.93 0.012 40);
+  --popover: oklch(0.17 0.03 14);
+  --popover-foreground: oklch(0.93 0.012 40);
+  --primary: var(--cyan);
+  --primary-foreground: oklch(0.16 0.03 210);
+  --secondary: oklch(0.24 0.045 18);
+  --secondary-foreground: oklch(0.93 0.012 40);
+  --muted: oklch(0.22 0.035 16);
+  --muted-foreground: oklch(0.68 0.04 25);
+  --accent: oklch(0.26 0.06 20);
+  --accent-foreground: oklch(0.95 0.01 40);
+  --destructive: oklch(0.65 0.22 25);
+  --border: oklch(0.36 0.08 22);
+  --input: oklch(0.36 0.08 22);
+  --ring: var(--cyan-dim);
+  --radius: 0.2rem;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans;
+    color-scheme: dark;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    min-height: 100vh;
+    /* faint red glow, like the game's menu backdrop */
+    background-image:
+      radial-gradient(ellipse 80% 50% at 50% -10%, oklch(0.3 0.09 20 / 0.55), transparent 70%),
+      radial-gradient(ellipse 60% 40% at 100% 100%, oklch(0.25 0.06 210 / 0.12), transparent 70%);
+    background-attachment: fixed;
+  }
+  ::selection {
+    background: oklch(0.88 0.13 195 / 0.3);
+  }
+}
+
+@layer components {
+  /* Uppercase condensed label, used for headings and stat names. */
+  .hud-label {
+    @apply font-heading font-semibold uppercase tracking-[0.08em];
+  }
+
+  /* Rectangles with two diagonally cut corners. */
+  .cut {
+    --cut: 10px;
+    clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
+  }
+  .cut-sm {
+    --cut: 6px;
+  }
+
+  /* Panel with cut corners and a 1px border (border drawn via an inset layer, since clip-path cuts borders). */
+  .hud-panel {
+    --cut: 12px;
+    position: relative;
+    background: linear-gradient(180deg, oklch(0.2 0.04 16 / 0.92), oklch(0.16 0.03 14 / 0.92));
+    clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
+  }
+  .hud-panel::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: var(--border);
+    clip-path: polygon(
+      var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut),
+      1px calc(var(--cut) + 0.4px), 1px calc(100% - 1px), calc(100% - var(--cut) - 0.4px) calc(100% - 1px),
+      calc(100% - 1px) calc(100% - var(--cut) - 0.4px), calc(100% - 1px) 1px, calc(var(--cut) + 0.4px) 1px, 1px calc(var(--cut) + 0.4px)
+    );
+  }
+  .hud-panel.is-active::before {
+    background: var(--cyan-dim);
+  }
+}

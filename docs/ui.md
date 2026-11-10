@@ -1,0 +1,84 @@
+# UI (web + desktop)
+
+One React UI, two targets:
+
+| | web | desktop |
+|---|---|---|
+| shell | static site (any static host) | Tauri 2 (WebView2 on Windows), single `.exe` |
+| save logic | Rust core compiled to wasm, runs in the page | **same wasm**, inside the webview |
+| open saves | pick a save folder (or the whole saves folder), or drag & drop | lists `%USERPROFILE%\Saved Games\CD Projekt Red\Cyberpunk 2077` directly |
+| write | downloads `<name>.zip` (extract into the saves folder) | creates a new save folder next to the others |
+
+Saves never leave the machine in either version.
+
+## Layout
+
+```
+crates/core      save format + edits (pure Rust, no I/O)
+crates/cli       command-line tool
+crates/wasm      wasm-bindgen bindings: `Session` (open save, edit, write), JSON in/out
+app/             Vite + React 19 + TypeScript + Tailwind 4 + shadcn/ui (Radix, Nova preset)
+  src/lib/core.ts         typed wrapper around the wasm Session
+  src/lib/storage.ts      save sources/targets: web (file picker, zip), desktop (Tauri commands), dev
+  src/state/save-context  open save, edit dispatch (`mutate`), change log, discard
+  src/components/         save browser, Character / Facts / Advanced tabs, save dialog
+  src-tauri/              desktop shell: narrow file commands + dialog plugin
+```
+
+## Running
+
+```
+npm --prefix app install
+npm --prefix app run dev            # web, http://localhost:5173 (builds the wasm first)
+npm --prefix app run desktop        # desktop window with hot reload
+npm --prefix app run build          # web production build → app/dist
+npm --prefix app run build:desktop  # desktop installer (NSIS/MSI); `npx tauri build --no-bundle` for just the exe
+```
+
+Needs Rust with the `wasm32-unknown-unknown` target, `wasm-pack`, and Node 20+.
+
+### Dev-only helpers
+
+Only active on the Vite dev server, so they never ship:
+* `GET /__dev/saves`: lists the project's copied saves (`saves/`) so the UI can be tested without a picker.
+* `POST /__dev/out/<file>`: writes into `work/web-out/`, to capture what the browser would download.
+* `window.__cpse`: the open save, for console checks.
+
+## Protecting users' saves
+
+* The start screen always shows a **"Back up your saves first"** notice with the saves folder path.
+* The Save-as dialog requires ticking **"I have a backup of my saves folder"** before it will write
+  or download. Once ticked, it stays ticked for the session.
+* Edits never touch the opened save: output always goes to a *new* folder (desktop) or a zip (web).
+* The Advanced tab warns that single-value edits may leave copies elsewhere out of sync.
+
+## Desktop file access
+
+The Tauri commands are deliberately narrow (see `app/src-tauri/src/lib.rs`):
+* reads only files inside a folder that contains `sav.dat`;
+* `create_save_dir` makes a new folder and fails if it exists;
+* `write_new_file` only writes into folders created this session, with `create_new` (never overwrites).
+
+## Verification done
+
+* Web: opened saves, edited attributes, points and facts, restored the reset, edited through the
+  Advanced tree, discarded edits. The browser-written `sav.dat` decompresses to **exactly** the same
+  data as the CLI's for the same edits, and `metadata.9.json` matches apart from `fileSize`.
+* The wasm build of `lz4_flex` compresses slightly differently from the native one (~2% larger file);
+  it's still a valid LZ4 stream that any LZ4 decoder reads identically.
+* Desktop: the frontend and the Rust shell both build. The file commands have unit tests. The desktop
+  window hasn't been exercised against a real saves folder yet.
+
+## Look & licensing
+
+The look borrows the game menus' palette (near-black red, salmon-red labels, cyan values, yellow
+points) and cut-corner panels. It uses no game assets. Third-party pieces are all permissively licensed:
+
+| what | license |
+|---|---|
+| shadcn/ui components, Radix UI, Tailwind CSS, React, Vite, Tauri | MIT / MIT-Apache |
+| Icons: Lucide | ISC |
+| Fonts: Inter, Rajdhani, JetBrains Mono (via Fontsource, bundled) | SIL OFL 1.1 |
+| fflate (zip) | MIT |
+
+The app icon/favicon is original (`app/public/favicon.svg`).

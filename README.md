@@ -1,7 +1,16 @@
-# Cyberpunk 2077 Save Editor (Rust)
+# Cyberpunk 2077 Save Editor
 
-A save reader/writer for Cyberpunk 2077, built by reverse engineering game 2.5 saves
+An unofficial save editor for Cyberpunk 2077, built by reverse engineering game 2.5 saves
 (`saveVersion` 277) and the game binary. Also tested on a 1.6-era save.
+
+It ships as a **website** and a **desktop app** (Tauri) with the same React UI, both running the
+Rust core compiled to WebAssembly. There's also a CLI. See [docs/ui.md](docs/ui.md).
+
+```
+npm --prefix app install
+npm --prefix app run dev        # web UI on http://localhost:5173
+npm --prefix app run desktop    # desktop app
+```
 
 **Status**
 * Container (decompress / recompress / node tree / node resizing): done, round-trips exactly.
@@ -12,10 +21,10 @@ A save reader/writer for Cyberpunk 2077, built by reverse engineering game 2.5 s
   See [docs/editing.md](docs/editing.md).
 * Not decoded yet: `inventory`/`itemData`, `PersistencySystem2`, `DataBuffer` contents, and more.
 
-## Usage
+## CLI
 
 ```
-cargo build --release
+cargo build --release -p cp2077-save-cli
 target/release/cp2077-save <command> ...
 ```
 
@@ -42,6 +51,7 @@ Copy the result into `%USERPROFILE%\Saved Games\CD Projekt Red\Cyberpunk 2077\` 
 
 ## Documentation
 
+* [docs/ui.md](docs/ui.md): web + desktop UI architecture, running, licensing
 * [docs/editing.md](docs/editing.md): how to edit, path syntax, what each edit touches
 * [docs/save-container.md](docs/save-container.md): `sav.dat` layout, compression, node tree, version gates
 * [docs/facts.md](docs/facts.md): quest facts and `ResetAttributeDisabled`
@@ -52,13 +62,10 @@ Copy the result into `%USERPROFILE%\Saved Games\CD Projekt Red\Cyberpunk 2077\` 
 ## Layout
 
 ```
-src/lib.rs       container reader/writer, node tree, node resizing
-src/facts.rs     FactsDB / FactsTable
-src/package.rs   embedded object packages
-src/edit.rs      path-based get/set (with insertion of omitted fields)
-src/player.rs    player-level edits (attributes, points)
-src/savedir.rs   writing a new save folder + metadata patches
-src/main.rs      CLI
+crates/core      save format: container, facts, packages, path edits, player edits (no I/O)
+crates/cli       command-line tool (`cp2077-save`)
+crates/wasm      WebAssembly bindings used by the UI
+app/             React + shadcn/ui frontend (web), app/src-tauri = desktop shell
 re/              Python RE helpers (pefile + capstone)
 docs/            findings
 saves/ gamefiles/ work/ output/   local copies & scratch (git-ignored)

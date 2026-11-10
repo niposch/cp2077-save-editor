@@ -4,9 +4,10 @@ use cp2077_save::{
     facts::parse_fact_key,
     package::{dump_package, dump_value, PackageNode},
     player::{resolve_attribute, resolve_point_kind},
-    savedir::{load, write_save_dir},
     SaveFile,
 };
+mod savedir;
+use savedir::{load, write_save_dir};
 use std::fs;
 use std::path::Path;
 
@@ -165,8 +166,11 @@ fn edit(src: &Path, dst: &Path, ops: &[&str]) -> Result<()> {
                 let (k, v) = split_kv(arg()?)?;
                 let (stat, meta_key) = resolve_attribute(k)?;
                 let v: i32 = v.parse().with_context(|| format!("bad number {v:?}"))?;
-                let old = s.set_attribute(stat, v)?;
-                println!("{stat}: {} -> {v}", old.map_or("default".into(), |o| o.to_string()));
+                let r = s.set_attribute(stat, v)?;
+                if let Some(w) = &r.warning {
+                    eprintln!("warning: {w}");
+                }
+                println!("{stat}: {} -> {v}", r.old.map_or("default".into(), |o| o.to_string()));
                 meta.push((meta_key.to_string(), format!("{v}.0")));
             }
             "--points" => {

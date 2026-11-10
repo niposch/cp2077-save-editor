@@ -69,6 +69,14 @@ fn int_of(v: Option<&Value>) -> Option<i64> {
     }
 }
 
+#[derive(Debug)]
+pub struct AttributeEdit {
+    /// Previous value (None = field was absent/default).
+    pub old: Option<i64>,
+    /// Set when the two copies of the attribute disagreed before the edit.
+    pub warning: Option<String>,
+}
+
 #[derive(Debug, Default)]
 pub struct PlayerSummary {
     pub level: Option<i64>,
@@ -137,8 +145,7 @@ impl SaveFile {
     }
 
     /// Set an attribute in PlayerDevelopmentData and the matching StatsSystem modifier.
-    /// Returns the previous value.
-    pub fn set_attribute(&mut self, stat: &str, value: i32) -> Result<Option<i64>> {
+    pub fn set_attribute(&mut self, stat: &str, value: i32) -> Result<AttributeEdit> {
         ensure!((3..=20).contains(&value), "attribute values must be 3..=20 (the game's own range)");
         let (off, modval) = self.attribute_modifier(stat)?;
         let old = self.edit_package(SSC, |p| {
@@ -148,14 +155,12 @@ impl SaveFile {
                 SetResult::Inserted => None,
             })
         })?;
-        if let Some(o) = old {
-            if (o as f32 - modval).abs() > 0.01 {
-                eprintln!("warning: {stat} was {o} in PlayerDevelopmentData but {modval} in StatsSystem");
-            }
-        }
+        let warning = old.filter(|o| (*o as f32 - modval).abs() > 0.01).map(|o| {
+            format!("{stat} was {o} in PlayerDevelopmentData but {modval} in StatsSystem; both now {value}")
+        });
         let i = self.find_node("StatsSystem").unwrap();
         self.node_bytes_mut(i)[off..off + 4].copy_from_slice(&(value as f32).to_le_bytes());
-        Ok(old)
+        Ok(AttributeEdit { old, warning })
     }
 
     /// Set unspent points of a kind ("" = attribute points). Returns the previous value.

@@ -4,3 +4,6 @@
 /gamefiles
 /output
 __pycache__/
+/app/src/wasm/pkg
+/app/src-tauri/gen
+/.claude/settings.local.json
