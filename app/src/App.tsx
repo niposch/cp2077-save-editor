@@ -30,8 +30,9 @@ const TAB_TRIGGER =
 function Stat({ value, chars, label, shortLabel, color, labelColor, prefix }: { value: string; chars: number; label?: string; shortLabel?: string; color: string; labelColor?: string; prefix?: string }) {
   return (
     <div className="flex items-baseline gap-1.5">
-      {prefix && <span className={`font-heading text-base font-semibold sm:text-lg ${labelColor}`}>{prefix}</span>}
-      <span className={`inline-block text-right font-heading text-2xl font-semibold tabular-nums sm:text-3xl ${color}`} style={{ width: `${chars + 0.3}ch` }}>
+      {/* the prefix sits inside the fixed box so it stays next to the digits */}
+      <span className={`inline-block text-right font-heading text-2xl font-semibold whitespace-nowrap tabular-nums sm:text-3xl ${color}`} style={{ width: `${chars + 0.3 + (prefix ? prefix.length * 0.5 + 0.4 : 0)}ch` }}>
+        {prefix && <span className={`mr-1.5 text-base sm:text-lg ${labelColor}`}>{prefix}</span>}
         {value}
       </span>
       {label && (
