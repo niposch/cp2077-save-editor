@@ -86,9 +86,12 @@ function SaveCard({ entry, onOpen, busy }: { entry: SaveEntry; onOpen: () => voi
           {m?.difficulty && <Badge variant="outline">{m.difficulty}</Badge>}
         </div>
         {example && (
-          <p className="mt-2 text-xs text-muted-foreground">
-            by <span className="text-foreground/85">{example.author}</span> · {example.source}
-          </p>
+          <>
+            {example.description && <p className="mt-2 text-xs text-foreground/75">{example.description}</p>}
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              by <span className="text-foreground/85">{example.author}</span> · {example.source}
+            </p>
+          </>
         )}
       </div>
     </button>
@@ -247,9 +250,21 @@ async function filesFromDrop(dt: DataTransfer): Promise<File[]> {
 /** Example saves bundled with the website, so visitors can try the editor without a save. */
 function ExampleSource() {
   const [examples, setExamples] = useState<ExampleEntry[]>([])
+  const { openEntry } = useSave()
   useEffect(() => {
-    listExamples().then(setExamples)
-  }, [])
+    listExamples().then((list) => {
+      setExamples(list)
+      // deep link: ?example=<folder> opens that example straight away
+      const params = new URLSearchParams(location.search)
+      const wanted = params.get("example")
+      if (!wanted) return
+      params.delete("example")
+      const rest = params.toString()
+      history.replaceState(null, "", `${location.pathname}${rest ? `?${rest}` : ""}${location.hash}`)
+      const hit = list.find((e) => e.folder === wanted)
+      if (hit) openEntry(hit)
+    })
+  }, [openEntry])
   if (!examples.length) return null
   return (
     <div className="space-y-3">
@@ -290,7 +305,7 @@ function DevSource() {
 
 export function SaveBrowser() {
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-10 px-6 py-8">
+    <div className="mx-auto w-full max-w-7xl space-y-10 px-4 py-6 sm:px-6 sm:py-8">
       <BackupNotice />
       {platform === "desktop" ? <DesktopSource /> : <WebSource />}
       {platform === "web" && <ExampleSource />}

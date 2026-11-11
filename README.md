@@ -2,7 +2,7 @@
 
 An unofficial save editor for Cyberpunk 2077 that runs in your browser.
 
-**[Open the editor →](https://niposch.github.io/cp2077-save-editor/)**
+**[Open the editor →](https://niposch.de/cp2077-save-editor/)**
 
 Everything happens locally: your save is read and edited in the page itself (the editing core is
 Rust compiled to WebAssembly) and is never uploaded anywhere. Edits are downloaded as a **new** save
@@ -34,7 +34,7 @@ edits need the 2.0 progression system.
 1. **Back up your saves.** Copy the whole folder
    `%USERPROFILE%\Saved Games\CD Projekt Red\Cyberpunk 2077` somewhere safe.
    (Steam/GOG cloud saves sync this same folder, so they're not a backup.)
-2. Open the [editor](https://niposch.github.io/cp2077-save-editor/) and choose a save folder
+2. Open the [editor](https://niposch.de/cp2077-save-editor/) and choose a save folder
    (e.g. `ManualSave-17`), or drop it onto the page. You can also try the bundled example save.
 3. Make your changes, then **Save as…** to download the edited save as a `.zip`.
 4. Extract it into your saves folder under a new name (e.g. `ManualSave-99/sav.dat`) and load it

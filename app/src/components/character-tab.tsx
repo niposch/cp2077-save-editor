@@ -54,6 +54,31 @@ function AttributeTile({ a, onSet }: { a: PlayerData["attributes"][number]; onSe
   )
 }
 
+/** Phone layout: the five attributes as rows (the diamond needs more width than a phone has). */
+function AttributeList({ attributes, onSet }: { attributes: PlayerData["attributes"]; onSet: (key: AttributeKey, v: number) => void }) {
+  return (
+    <Panel className="sm:hidden">
+      <HudHeading>Attributes</HudHeading>
+      <div className="space-y-3">
+        {attributes.map((a) => {
+          const value = a.value ?? 3
+          const mismatch = a.modifier != null && Math.abs(a.modifier - value) > 0.01
+          return (
+            <div key={a.key} className="flex items-center justify-between gap-2">
+              <span className="hud-label flex items-center gap-1.5 text-sm text-salmon">
+                {ATTR_LABEL[a.key]}
+                {mismatch && <TriangleAlert className="size-3.5 text-gold" aria-label="The two stored copies differ" />}
+              </span>
+              <Stepper label={ATTR_LABEL[a.key]} value={value} min={3} max={20} onCommit={(v) => onSet(a.key, v)} valueClassName="text-2xl text-cyan" />
+            </div>
+          )
+        })}
+      </div>
+      <p className="mt-3 text-xs text-muted-foreground">Attributes range from 3 to 20. Changing one doesn't refund or consume points.</p>
+    </Panel>
+  )
+}
+
 const LIFE_PATHS: { value: LifePath; label: string }[] = [
   { value: "StreetKid", label: "Street Kid" },
   { value: "Nomad", label: "Nomad" },
@@ -208,7 +233,6 @@ export function CharacterTab() {
                   </TooltipTrigger>
                   <TooltipContent>
                     {POINT_STYLE[p.key].hint}
-                    {p.spent != null && ` · ${p.spent} spent`}
                   </TooltipContent>
                 </Tooltip>
                 <Stepper
@@ -225,8 +249,9 @@ export function CharacterTab() {
         </Panel>
       </div>
 
-      <div className="mx-auto w-full max-w-[600px] space-y-6 self-start">
-      <div className="grid min-w-[420px] grid-cols-3 gap-3">
+      <div className="mx-auto w-full max-w-[600px] min-w-0 space-y-6 self-start">
+      <AttributeList attributes={player.attributes} onSet={setAttr} />
+      <div className="hidden grid-cols-3 gap-3 sm:grid">
         {player.attributes.map((a) => (
           <AttributeTile key={a.key} a={a} onSet={(v) => setAttr(a.key, v)} />
         ))}

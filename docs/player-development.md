@@ -85,6 +85,25 @@ level − 1 because skill progression also grants perk points (at skill levels 1
 the five skills) and perk shards add more. The editor's level edit only adds/removes the
 level-up share.
 
+### Perk points: what "spent" and "unspent" mean
+
+`devPoints[type=Primary].unspent` is exactly the "Perk points available" number the game shows
+(edited to 10 in ManualSave-17, shown as 10 in-game); nothing recomputes it on load.
+`spent` is a **lifetime counter**: it doesn't go down when perks are refunded. ManualSave-18 (after a
+reset that refunded every perk) still says `spent = 57`. The perks actually owned are
+`attributesData[*].unlockedPerks[*].currLevel`.
+
+| save | perk levels bought | spent | unspent |
+|---|---|---|---|
+| ManualSave-17, level 48 | 56 | 57 | 4 |
+| ManualSave-18, after the reset | 0 | 57 | 59 |
+| example ManualSave-818, level 50 | 0 | 444 | 221 |
+
+ManualSave-17's 61 points match what the game grants by level 48: 47 from levels, 7 from skill
+milestones (15/35 in each skill) and the rest from perk shards. A legitimate level-50 save has at
+most about 70, so the example save's 221 unspent points were added outside normal play before it
+was published. The editor shows the stored value, which is what the game shows.
+
 ## Life path
 
 `PlayerDevelopmentData.lifePath: gamedataLifePath`. `Corporate` is the enum's first value, so Corpo

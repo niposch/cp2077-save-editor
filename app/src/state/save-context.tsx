@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react"
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { toast } from "sonner"
 import { SaveSession, initCore, type Change, type PlayerData } from "@/lib/core"
 import { parseMetadata, type SaveEntry, type SaveFiles, type SaveMetadata } from "@/lib/storage"
@@ -29,6 +29,19 @@ interface Ctx {
 
 const SaveCtx = createContext<Ctx | null>(null)
 
+const HISTORY_KEY = "cp2077SaveOpen"
+const isSaveEntry = (state: unknown) => !!(state && typeof state === "object" && (state as Record<string, unknown>)[HISTORY_KEY])
+/** Set when the in-app back arrow already asked, so the following popstate doesn't ask again. */
+const closingConfirmed = { current: false }
+
+function confirmLeave(open: OpenSave | null): boolean {
+  const n = open ? open.session.changes().length : 0
+  if (n === 0) return true
+  const ok = window.confirm(`Close this save and discard ${n} unsaved change${n === 1 ? "" : "s"}?`)
+  if (ok) closingConfirmed.current = true
+  return ok
+}
+
 export function SaveProvider({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState<OpenSave | null>(null)
   const [rev, setRev] = useState(0)
@@ -53,6 +66,8 @@ export function SaveProvider({ children }: { children: ReactNode }) {
       await new Promise((r) => setTimeout(r, 16))
       const session = new SaveSession(files.sav)
       replace({ files, meta: parseMetadata(files.metadataText) ?? e.meta, session })
+      // an open save is its own history entry, so the browser's Back returns to the start page
+      if (!isSaveEntry(history.state)) history.pushState({ [HISTORY_KEY]: true }, "")
     } catch (err) {
       toast.error(`Couldn't open ${e.folder}`, { description: String(err instanceof Error ? err.message : err) })
     } finally {
@@ -60,7 +75,28 @@ export function SaveProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  const close = useCallback(() => replace(null), [])
+  /** Close the save (in-app back arrow); asks first when there are unsaved changes. */
+  const close = useCallback(() => {
+    if (!confirmLeave(current.current)) return
+    // leave through the history entry pushed on open, so Back/Forward stay consistent
+    if (isSaveEntry(history.state)) history.back()
+    else replace(null)
+  }, [])
+
+  // browser Back (or Forward past the start page) closes the open save
+  useEffect(() => {
+    const onPop = (e: PopStateEvent) => {
+      if (isSaveEntry(e.state) || !current.current) return
+      if (!closingConfirmed.current && !confirmLeave(current.current)) {
+        history.pushState({ [HISTORY_KEY]: true }, "") // stay on the save
+        return
+      }
+      closingConfirmed.current = false
+      replace(null)
+    }
+    window.addEventListener("popstate", onPop)
+    return () => window.removeEventListener("popstate", onPop)
+  }, [])
 
   const discard = useCallback(() => {
     const cur = current.current

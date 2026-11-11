@@ -163,7 +163,9 @@ function ChunkView({ node, index, onJump }: { node: string; index: number; onJum
 
   return (
     <>
-      <HudHeading right={<span className="font-mono text-xs text-muted-foreground">{node} · #{index}</span>}>{chunk.type}</HudHeading>
+      <HudHeading right={<span className="min-w-0 truncate font-mono text-xs text-muted-foreground" title={`${node} · #${index}`}>{node} · #{index}</span>}>
+        {chunk.type}
+      </HudHeading>
       {rows.length === 0 ? (
         <p className="text-muted-foreground">No stored fields (all defaults).</p>
       ) : (

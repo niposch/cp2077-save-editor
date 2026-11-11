@@ -47,7 +47,8 @@ Only active on the Vite dev server, so they never ship:
 ## Publishing the website (GitHub Pages)
 
 `.github/workflows/pages.yml` builds the site (wasm core + React + `examples/`) on every push to
-`main`/`master` and deploys `app/dist` to GitHub Pages. Turn it on once under
+`main`/`master` and deploys `app/dist` to GitHub Pages: https://niposch.de/cp2077-save-editor/
+(the account's Pages domain is niposch.de). Turn it on once under
 *Settings → Pages → Build and deployment → Source: GitHub Actions*. The build uses relative asset
 paths (`base: './'`), so it works under `https://<user>.github.io/<repo>/`.
 
@@ -56,6 +57,10 @@ paths (`base: './'`), so it works under `https://<user>.github.io/<repo>/`.
 The web start screen offers the saves listed in `examples/index.json`, with their authors credited
 on the card and linked below. The Vite plugin in `app/vite.config.ts` serves `examples/` in dev and
 copies it into `dist/examples` for web builds. Desktop builds (run by the Tauri CLI) leave it out.
+
+Links: `?example=<folder>` opens a bundled example save directly (e.g. `?example=ManualSave-818`).
+An open save is its own browser-history entry, so Back returns to the start page (asking first if
+there are unsaved changes).
 
 ## Interaction details
 

@@ -5,9 +5,9 @@ import { cn } from "@/lib/utils"
 /** Section heading in the game's condensed uppercase style. */
 export function HudHeading({ children, className, right }: { children: ReactNode; className?: string; right?: ReactNode }) {
   return (
-    <div className={cn("mb-3 flex items-center gap-3", className)}>
-      <h2 className="hud-label text-salmon text-base">{children}</h2>
-      <div className="h-px flex-1 bg-gradient-to-r from-salmon-dim/80 to-transparent" />
+    <div className={cn("mb-3 flex min-w-0 items-center gap-3", className)}>
+      <h2 className="hud-label min-w-0 truncate text-base text-salmon">{children}</h2>
+      <div className="h-px min-w-4 flex-1 bg-gradient-to-r from-salmon-dim/80 to-transparent" />
       {right}
     </div>
   )
